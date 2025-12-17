@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %> | EventHub</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- Custom CSS -->
+    <link href="/css/style.css" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary: #4361ee;
+            --secondary: #3a0ca3;
+            --gradient: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%);
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .navbar-brand {
+            font-family: 'Poppins', sans-serif;
+            font-weight: 700;
+            font-size: 1.8rem;
+            background: var(--gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .hero-section {
+            background: var(--gradient);
+            color: white;
+            padding: 100px 0;
+        }
+        
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+        }
+        
+        .btn-primary {
+            background: var(--gradient);
+            border: none;
+            padding: 12px 30px;
+            border-radius: 50px;
+        }
+        
+        .footer {
+            background: #212529;
+            color: white;
+            margin-top: auto;
+        }
+        
+        .navbar {
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+        
+        .active {
+            color: var(--primary) !important;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-white sticky-top">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-calendar-event me-2"></i>EventHub
+            </a>
+            
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav mx-auto">
+                    <li class="nav-item">
+                        <a class="nav-link <%= active === 'home' ? 'active' : '' %>" href="/">
+                            <i class="bi bi-house-door"></i> Home
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link <%= active === 'events' ? 'active' : '' %>" href="/events">
+                            <i class="bi bi-calendar3"></i> Events
+                        </a>
+                    </li>
+                    <% if (user) { %>
+                        <li class="nav-item">
+                            <a class="nav-link <%= active === 'dashboard' ? 'active' : '' %>" href="/dashboard">
+                                <i class="bi bi-speedometer2"></i> Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/users/registrations">
+                                <i class="bi bi-ticket-perforated"></i> My Tickets
+                            </a>
+                        </li>
+                    <% } %>
+                </ul>
+                
+                <div class="d-flex">
+                    <% if (user) { %>
+                        <div class="dropdown">
+                            <a href="#" class="d-flex align-items-center text-decoration-none dropdown-toggle" 
+                               data-bs-toggle="dropdown">
+                                <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center" 
+                                     style="width: 40px; height: 40px; color: white; font-weight: 600;">
+                                    <%= user.name.charAt(0).toUpperCase() %>
+                                </div>
+                                <span class="ms-2"><%= user.name %></span>
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="/auth/logout">
+                                    <i class="bi bi-box-arrow-right me-2"></i>Logout
+                                </a></li>
+                            </ul>
+                        </div>
+                    <% } else { %>
+                        <a href="/auth/login" class="btn btn-outline-primary me-2">
+                            <i class="bi bi-box-arrow-in-right"></i> Login
+                        </a>
+                        <a href="/auth/register" class="btn btn-primary">
+                            <i class="bi bi-person-plus"></i> Register
+                        </a>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Flash Messages -->
+    <% if (success) { %>
+        <div class="container mt-3">
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="bi bi-check-circle-fill me-2"></i>
+                <%= success %>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        </div>
+    <% } %>
+    
+    <% if (error) { %>
+        <div class="container mt-3">
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                <%= error %>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        </div>
+    <% } %>
+
+    <!-- Main Content -->
+    <main class="flex-grow-1">
+        <!-- Hero Section -->
+        <section class="hero-section">
+            <div class="container">
+                <div class="row align-items-center">
+                    <div class="col-lg-6">
+                        <h1 class="display-3 fw-bold mb-4">Discover Amazing Events Near You</h1>
+                        <p class="lead mb-4 opacity-75">
+                            From concerts and conferences to workshops and festivals. 
+                            Find, register, and manage events with ease.
+                        </p>
+                        <div class="d-flex flex-wrap gap-3">
+                            <a href="/events" class="btn btn-light btn-lg px-4">
+                                <i class="bi bi-search me-2"></i>Browse Events
+                            </a>
+                            <% if (!user) { %>
+                                <a href="/auth/register" class="btn btn-outline-light btn-lg px-4">
+                                    <i class="bi bi-person-plus me-2"></i>Join Free
+                                </a>
+                            <% } else { %>
+                                <a href="/events/create" class="btn btn-outline-light btn-lg px-4">
+                                    <i class="bi bi-plus-circle me-2"></i>Create Event
+                                </a>
+                            <% } %>
+                        </div>
+                    </div>
+                    <div class="col-lg-6 text-center">
+                        <img src="https://cdn.pixabay.com/photo/2018/05/08/08/44/artificial-intelligence-3382507_1280.jpg" 
+                             alt="Event Management" 
+                             class="img-fluid rounded-4 shadow-lg" 
+                             style="max-height: 400px;">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features Section -->
+        <section class="py-5">
+            <div class="container">
+                <div class="text-center mb-5">
+                    <h2 class="fw-bold mb-3">Why Choose EventHub?</h2>
+                    <p class="text-muted lead">Powerful features designed for both attendees and organizers</p>
+                </div>
+                
+                <div class="row g-4">
+                    <div class="col-md-4">
+                        <div class="card h-100 text-center p-4">
+                            <div class="feature-icon">
+                                <i class="bi bi-calendar-check"></i>
+                            </div>
+                            <h4 class="fw-bold mb-3">Easy Registration</h4>
+                            <p class="text-muted">
+                                Register for events in seconds with our streamlined booking system. 
+                                Get instant confirmation and e-tickets.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card h-100 text-center p-4">
+                            <div class="feature-icon">
+                                <i class="bi bi-search-heart"></i>
+                            </div>
+                            <h4 class="fw-bold mb-3">Smart Discovery</h4>
+                            <p class="text-muted">
+                                Find events tailored to your interests with our intelligent 
+                                filtering and recommendation system.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card h-100 text-center p-4">
+                            <div class="feature-icon">
+                                <i class="bi bi-shield-check"></i>
+                            </div>
+                            <h4 class="fw-bold mb-3">Secure & Reliable</h4>
+                            <p class="text-muted">
+                                Your data is protected with enterprise-grade security. 
+                                Enjoy hassle-free event management with 99.9% uptime.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Stats Section -->
+        <section class="py-5 bg-light">
+            <div class="container">
+                <div class="row text-center">
+                    <div class="col-md-3 mb-4">
+                        <h2 class="display-4 fw-bold text-primary">500+</h2>
+                        <p class="text-muted">Events Hosted</p>
+                    </div>
+                    <div class="col-md-3 mb-4">
+                        <h2 class="display-4 fw-bold text-primary">10K+</h2>
+                        <p class="text-muted">Happy Users</p>
+                    </div>
+                    <div class="col-md-3 mb-4">
+                        <h2 class="display-4 fw-bold text-primary">50+</h2>
+                        <p class="text-muted">Cities Covered</p>
+                    </div>
+                    <div class="col-md-3 mb-4">
+                        <h2 class="display-4 fw-bold text-primary">99%</h2>
+                        <p class="text-muted">Satisfaction Rate</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- How It Works -->
+        <section class="py-5">
+            <div class="container">
+                <div class="text-center mb-5">
+                    <h2 class="fw-bold mb-3">How It Works</h2>
+                    <p class="text-muted lead">Get started in three simple steps</p>
+                </div>
+                
+                <div class="row g-4">
+                    <div class="col-md-4">
+                        <div class="card border-0 bg-transparent text-center">
+                            <div class="position-relative mb-4">
+                                <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center mx-auto" 
+                                     style="width: 80px; height: 80px; color: white; font-size: 2rem;">
+                                    1
+                                </div>
+                            </div>
+                            <h4 class="fw-bold mb-3">Create Account</h4>
+                            <p class="text-muted">
+                                Sign up for free in less than a minute. 
+                                No credit card required to start exploring.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card border-0 bg-transparent text-center">
+                            <div class="position-relative mb-4">
+                                <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center mx-auto" 
+                                     style="width: 80px; height: 80px; color: white; font-size: 2rem;">
+                                    2
+                                </div>
+                            </div>
+                            <h4 class="fw-bold mb-3">Browse Events</h4>
+                            <p class="text-muted">
+                                Discover events by category, date, location, or popularity. 
+                                Save your favorites to wishlist.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card border-0 bg-transparent text-center">
+                            <div class="position-relative mb-4">
+                                <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center mx-auto" 
+                                     style="width: 80px; height: 80px; color: white; font-size: 2rem;">
+                                    3
+                                </div>
+                            </div>
+                            <h4 class="fw-bold mb-3">Register & Enjoy</h4>
+                            <p class="text-muted">
+                                Secure your spot with one click. 
+                                Get reminders, e-tickets, and share with friends.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- User Status -->
+        <% if (user) { %>
+            <section class="py-5 bg-primary bg-opacity-10">
+                <div class="container">
+                    <div class="card border-0">
+                        <div class="card-body p-5">
+                            <div class="row align-items-center">
+                                <div class="col-md-8">
+                                    <h3 class="fw-bold mb-3">
+                                        <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                        Welcome back, <%= user.name %>!
+                                    </h3>
+                                    <p class="text-muted mb-0">
+                                        You're all set to explore amazing events. 
+                                        Check out the latest events or create your own.
+                                    </p>
+                                </div>
+                                <div class="col-md-4 text-end">
+                                    <a href="/events" class="btn btn-primary btn-lg me-2">
+                                        <i class="bi bi-calendar3"></i> Browse Events
+                                    </a>
+                                    <a href="/events/create" class="btn btn-outline-primary btn-lg">
+                                        <i class="bi bi-plus-circle"></i> Create Event
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        <% } %>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer py-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h4 class="mb-3">
+                        <i class="bi bi-calendar-event"></i> EventHub
+                    </h4>
+                    <p class="text-light">
+                        Your gateway to amazing events and unforgettable experiences.
+                    </p>
+                </div>
+                <div class="col-md-6 text-end">
+                    <p class="text-light mb-0">
+                        &copy; 2024 EventHub. All rights reserved.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Custom JS -->
+    <script src="/js/main.js"></script>
+</body>
+</html>
