@@ -170,7 +170,7 @@ const registrationRoutes = require('./routes/registrationRoutes');
 const wishlistRoutes = require('./routes/wishlistRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
-
+const dashboardRoutes = require('./routes/dashboardRoutes');
 // Import notification manager
 const { NotificationManager } = require('./controllers/notificationController');
 
@@ -231,6 +231,7 @@ app.use((req, res, next) => {
 // Routes
 app.use('/auth', authRoutes);
 app.use('/events', eventRoutes);
+app.use('/', dashboardRoutes);
 app.use('/', registrationRoutes);
 app.use('/', wishlistRoutes);
 app.use('/', reviewRoutes);
@@ -285,14 +286,8 @@ app.get('/test-session', (req, res) => {
   `);
 });
 
-// Dashboard route - FIXED
-app.get('/dashboard', auth.isAuthenticated, (req, res) => {
-  res.render('dashboard', {
-    title: 'Dashboard',
-    active: 'dashboard',
-    user: req.session.user
-  });
-});
+
+
 
 // Test login route (for testing without database)
 app.get('/test-login', (req, res) => {
