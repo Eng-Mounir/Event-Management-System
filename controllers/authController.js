@@ -276,12 +276,112 @@ module.exports = {
 
       res.render('auth/profile', {
         title: 'My Profile - EventHub',
-        user: user
+        user: user,
+        active: 'profile',
+        // success: req.flash('success'),
+        // error: req.flash('error')
       });
     } catch (error) {
       console.error(error);
       req.flash('error', 'Unable to load profile');
       res.redirect('/');
+    }
+  },
+  // Update user profile
+  updateProfile: async (req, res) => {
+    try {
+      const userId = req.session.user.userId;
+      const { name, email, phone, currentPassword, newPassword, confirmPassword } = req.body;
+      
+      const user = await User.findByPk(userId);
+      
+      if (!user) {
+        req.flash('error', 'User not found');
+        return res.redirect('/auth/profile');
+      }
+
+      // Update basic info
+      user.name = name || user.name;
+      user.email = email || user.email;
+      user.phone = phone || user.phone;
+
+      // Update password if provided
+      if (currentPassword && newPassword) {
+        // Verify current password
+        const isValid = await user.comparePassword(currentPassword);
+        if (!isValid) {
+          req.flash('error', 'Current password is incorrect');
+          return res.redirect('/auth/profile');
+        }
+        
+        if (newPassword !== confirmPassword) {
+          req.flash('error', 'New passwords do not match');
+          return res.redirect('/auth/profile');
+        }
+        
+        if (newPassword.length < 6) {
+          req.flash('error', 'New password must be at least 6 characters');
+          return res.redirect('/auth/profile');
+        }
+        
+        user.password = newPassword;
+      }
+
+      await user.save();
+      // Update session
+      req.session.user.name = user.name;
+      req.session.user.email = user.email;
+      
+      req.flash('success', 'Profile updated successfully!');
+      res.redirect('/auth/profile');
+      
+    } catch (error) {
+      console.error('❌ Profile update error:', error);
+      
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        req.flash('error', 'Email already exists');
+      } else {
+        req.flash('error', 'Failed to update profile');
+      }
+      
+      res.redirect('/auth/profile');
+    }
+  },
+  // Delete user account
+  deleteAccount: async (req, res) => {
+    try {
+      const userId = req.session.user.userId;
+      const { confirmPassword } = req.body;
+      
+      const user = await User.findByPk(userId);
+      
+      if (!user) {
+        req.flash('error', 'User not found');
+        return res.redirect('/auth/profile');
+      }
+
+      // Verify password
+      const isValid = await user.comparePassword(confirmPassword);
+      if (!isValid) {
+        req.flash('error', 'Incorrect password');
+        return res.redirect('/auth/profile');
+      }
+// Delete user
+      await user.destroy();
+      
+      // Destroy session
+      req.session.destroy((err) => {
+        if (err) {
+          console.error('❌ Session destroy error:', err);
+        }
+        req.flash('success', 'Your account has been deleted');
+        res.redirect('/');
+      });
+      
+    } catch (error) {
+      console.error('❌ Delete account error:', error);
+      req.flash('error', 'Failed to delete account');
+      res.redirect('/auth/profile');
     }
   },
   

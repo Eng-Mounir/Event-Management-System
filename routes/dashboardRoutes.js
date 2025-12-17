@@ -191,5 +191,51 @@ router.get('/dashboard', auth.isAuthenticated, async (req, res) => {
     res.redirect('/');
   }
 });
-
+// Add this route before module.exports in dashboardRoutes.js
+router.get('/dashboard/stats', auth.isAuthenticated, async (req, res) => {
+  try {
+    const userId = req.session.user.userId;
+    
+    const eventsAttended = await Registration.count({
+      include: [{
+        model: Event,
+        as: 'event',
+        where: {
+          date: { [Op.lt]: new Date() }
+        }
+      }],
+      where: { userId }
+    });
+    
+    const upcomingEvents = await Registration.count({
+      include: [{
+        model: Event,
+        as: 'event',
+        where: {
+          date: { [Op.gte]: new Date() }
+        }
+      }],
+      where: { userId }
+    });
+    
+    const wishlistedEvents = await Wishlist.count({
+      where: { userId }
+    });
+    
+    const reviewsGiven = await Review.count({
+      where: { userId }
+    });
+    
+    res.json({
+      eventsAttended,
+      upcomingEvents,
+      wishlistedEvents,
+      reviewsGiven
+    });
+    
+  } catch (error) {
+    console.error('Stats error:', error);
+    res.status(500).json({ error: 'Unable to fetch stats' });
+  }
+});
 module.exports = router;

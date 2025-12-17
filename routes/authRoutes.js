@@ -19,8 +19,12 @@ router.post('/login',
   authController.login
 );
 
-// Protected routes
-router.get('/profile', auth.isAuthenticated, authController.showProfile);
+// Logout route
 router.get('/logout', authController.logout);
+// Profile routes
+router.get('/profile', auth.isAuthenticated, authController.showProfile);
+router.post('/profile', auth.isAuthenticated, authController.updateProfile);
+router.post('/profile/delete', auth.isAuthenticated, authController.deleteAccount);
+
 
 module.exports = router;
