@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %> | EventHub</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    
+    <style>
+        :root {
+            --primary: #4361ee;
+            --secondary: #3a0ca3;
+        }
+        
+        body {
+            background-color: #f8fafc;
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .notification-item {
+            border-left: 4px solid transparent;
+            transition: all 0.3s ease;
+        }
+        
+        .notification-item.unread {
+            background-color: #f0f7ff;
+            border-left-color: var(--primary);
+        }
+        
+        .notification-item:hover {
+            background-color: #f8f9fa;
+            transform: translateX(5px);
+        }
+        
+        .notification-type {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .badge-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        
+        .notification-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+        
+        .notification-event_reminder {
+            background-color: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .notification-registration_confirmation {
+            background-color: #e8f5e9;
+            color: #388e3c;
+        }
+        
+        .notification-event_update {
+            background-color: #fff3e0;
+            color: #f57c00;
+        }
+        
+        .notification-promotional {
+            background-color: #f3e5f5;
+            color: #7b1fa2;
+        }
+        
+        .notification-system {
+            background-color: #e0e0e0;
+            color: #616161;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="/">
+                <i class="bi bi-calendar-event text-primary me-2"></i>EventHub
+            </a>
+            
+            <div class="collapse navbar-collapse">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/dashboard">
+                            <i class="bi bi-speedometer2"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/notifications">
+                            <i class="bi bi-bell"></i> Notifications
+                            <% if (notifications && notifications.some(n => !n.isRead)) { %>
+                                <span class="badge bg-danger rounded-pill ms-1">
+                                    <%= notifications.filter(n => !n.isRead).length %>
+                                </span>
+                            <% } %>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/auth/profile">
+                            <i class="bi bi-person-circle"></i> Profile
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/auth/logout">
+                            <i class="bi bi-box-arrow-right"></i> Logout
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Flash Messages -->
+    <% if (success) { %>
+        <div class="container mt-3">
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="bi bi-check-circle-fill me-2"></i>
+                <%= success %>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        </div>
+    <% } %>
+    
+    <% if (error) { %>
+        <div class="container mt-3">
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                <%= error %>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        </div>
+    <% } %>
+
+    <!-- Main Content -->
+    <div class="container py-5">
+        <div class="row">
+            <div class="col-lg-8 mx-auto">
+                <!-- Header -->
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h1 class="h3 fw-bold">
+                        <i class="bi bi-bell me-2"></i>Notifications
+                    </h1>
+                    
+                    <% if (notifications && notifications.length > 0) { %>
+                        <div class="d-flex gap-2">
+                            <form action="/notifications/mark-all-read" method="POST" class="d-inline">
+                                <button type="submit" class="btn btn-outline-primary btn-sm">
+                                    <i class="bi bi-check-all me-1"></i>Mark All Read
+                                </button>
+                            </form>
+                            <form action="/notifications/clear-all" method="POST" class="d-inline" 
+                                  onsubmit="return confirm('Delete all notifications?')">
+                                <button type="submit" class="btn btn-outline-danger btn-sm">
+                                    <i class="bi bi-trash me-1"></i>Clear All
+                                </button>
+                            </form>
+                        </div>
+                    <% } %>
+                </div>
+
+                <!-- Notifications List -->
+                <div class="card shadow-sm border-0">
+                    <div class="card-body p-0">
+                        <% if (notifications && notifications.length > 0) { %>
+                            <div class="list-group list-group-flush">
+                                <% notifications.forEach(notification => { %>
+                                    <div class="list-group-item notification-item <%= notification.isRead ? 'read' : 'unread' %> p-4">
+                                        <div class="row align-items-center">
+                                            <div class="col-auto">
+                                                <div class="notification-icon notification-<%= notification.type %>">
+                                                    <% if (notification.type === 'event_reminder') { %>
+                                                        <i class="bi bi-alarm"></i>
+                                                    <% } else if (notification.type === 'registration_confirmation') { %>
+                                                        <i class="bi bi-check-circle"></i>
+                                                    <% } else if (notification.type === 'event_update') { %>
+                                                        <i class="bi bi-exclamation-triangle"></i>
+                                                    <% } else if (notification.type === 'promotional') { %>
+                                                        <i class="bi bi-megaphone"></i>
+                                                    <% } else { %>
+                                                        <i class="bi bi-info-circle"></i>
+                                                    <% } %>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="col">
+                                                <div class="d-flex justify-content-between align-items-start mb-1">
+                                                    <h6 class="fw-bold mb-0"><%= notification.title %></h6>
+                                                    <small class="text-muted">
+                                                        <%= new Date(notification.createdAt).toLocaleDateString('en-US', {
+                                                            month: 'short',
+                                                            day: 'numeric',
+                                                            hour: '2-digit',
+                                                            minute: '2-digit'
+                                                        }) %>
+                                                    </small>
+                                                </div>
+                                                
+                                                <p class="text-muted mb-2"><%= notification.message %></p>
+                                                
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <span class="badge bg-light text-dark notification-type">
+                                                        <%= notification.type.replace('_', ' ') %>
+                                                    </span>
+                                                    
+                                                    <div class="d-flex gap-2">
+                                                        <% if (!notification.isRead) { %>
+                                                            <form action="/notifications/<%= notification.notificationId %>/read" 
+                                                                  method="POST" class="d-inline">
+                                                                <button type="submit" class="btn btn-link btn-sm text-decoration-none p-0">
+                                                                    <i class="bi bi-check me-1"></i>Mark as read
+                                                                </button>
+                                                            </form>
+                                                        <% } %>
+                                                        
+                                                        <form action="/notifications/<%= notification.notificationId %>" 
+                                                              method="POST" class="d-inline">
+                                                            <input type="hidden" name="_method" value="DELETE">
+                                                            <button type="submit" class="btn btn-link btn-sm text-decoration-none text-danger p-0"
+                                                                    onclick="return confirm('Delete this notification?')">
+                                                                <i class="bi bi-trash me-1"></i>Delete
+                                                            </button>
+                                                        </form>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                <% }) %>
+                            </div>
+                        <% } else { %>
+                            <!-- Empty State -->
+                            <div class="text-center py-5">
+                                <div class="mb-4">
+                                    <i class="bi bi-bell-slash text-muted" style="font-size: 4rem;"></i>
+                                </div>
+                                <h5 class="fw-bold text-muted">No notifications yet</h5>
+                                <p class="text-muted">When you have notifications, they'll appear here</p>
+                                <a href="/events" class="btn btn-primary mt-2">
+                                    <i class="bi bi-calendar3 me-2"></i>Browse Events
+                                </a>
+                            </div>
+                        <% } %>
+                    </div>
+                </div>
+
+                <!-- Stats -->
+                <% if (notifications && notifications.length > 0) { %>
+                    <div class="mt-4">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <div class="card border-0 bg-primary bg-opacity-10">
+                                    <div class="card-body text-center">
+                                        <h4 class="fw-bold text-primary"><%= notifications.length %></h4>
+                                        <p class="text-muted mb-0">Total Notifications</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card border-0 bg-warning bg-opacity-10">
+                                    <div class="card-body text-center">
+                                        <h4 class="fw-bold text-warning">
+                                            <%= notifications.filter(n => !n.isRead).length %>
+                                        </h4>
+                                        <p class="text-muted mb-0">Unread</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card border-0 bg-success bg-opacity-10">
+                                    <div class="card-body text-center">
+                                        <h4 class="fw-bold text-success">
+                                            <%= notifications.filter(n => n.isRead).length %>
+                                        </h4>
+                                        <p class="text-muted mb-0">Read</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                <% } %>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-dark text-white py-4 mt-5">
+        <div class="container text-center">
+            <p class="mb-0">&copy; 2024 EventHub. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

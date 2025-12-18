@@ -161,10 +161,10 @@ class NotificationManager {
   }
 }
 
+// Controller methods
 module.exports = {
   NotificationManager,
 
-  // Controller methods
   getUserNotifications: async (req, res) => {
     try {
       const notifications = await Notification.findAll({
@@ -172,12 +172,6 @@ module.exports = {
         order: [['createdAt', 'DESC']],
         limit: 50
       });
-
-      // Mark as read
-      await Notification.update(
-        { isRead: true },
-        { where: { userId: req.session.user.userId, isRead: false } }
-      );
 
       res.render('notifications/index', {
         title: 'Notifications',
@@ -220,7 +214,47 @@ module.exports = {
     }
   },
 
-  // Send event reminder (cron job or manual trigger)
+  markAllAsRead: async (req, res) => {
+    try {
+      await Notification.update(
+        { isRead: true },
+        { where: { userId: req.session.user.userId, isRead: false } }
+      );
+      req.flash('success', 'All notifications marked as read');
+      res.redirect('/notifications');
+    } catch (error) {
+      console.error(error);
+      req.flash('error', 'Failed to mark all as read');
+      res.redirect('/notifications');
+    }
+  },
+
+  clearAllNotifications: async (req, res) => {
+    try {
+      await Notification.destroy({
+        where: { userId: req.session.user.userId }
+      });
+      req.flash('success', 'All notifications cleared');
+      res.redirect('/notifications');
+    } catch (error) {
+      console.error(error);
+      req.flash('error', 'Failed to clear notifications');
+      res.redirect('/notifications');
+    }
+  },
+
+  getNotificationCount: async (req, res) => {
+    try {
+      const unreadCount = await Notification.count({
+        where: { userId: req.session.user.userId, isRead: false }
+      });
+      res.json({ count: unreadCount });
+    } catch (error) {
+      console.error(error);
+      res.json({ count: 0 });
+    }
+  },
+
   sendEventReminders: async () => {
     try {
       const tomorrow = new Date();

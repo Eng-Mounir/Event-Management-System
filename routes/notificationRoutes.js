@@ -19,6 +19,26 @@ router.delete('/notifications/:notificationId',
   notificationController.deleteNotification
 );
 
+router.post('/notifications/mark-all-read', 
+  auth.isAuthenticated,
+  notificationController.markAllAsRead
+);
+
+router.post('/notifications/clear-all', 
+  auth.isAuthenticated,
+  notificationController.clearAllNotifications
+);
+
+router.delete('/notifications/:notificationId', 
+  auth.isAuthenticated,
+  notificationController.deleteNotification
+);
+
+// API endpoint for notification count (for navbar)
+router.get('/api/notifications/count',
+  auth.isAuthenticated,
+  notificationController.getNotificationCount
+);
 // Admin route to trigger reminders (for testing)
 router.post('/admin/send-reminders', 
   auth.isAuthenticated,
