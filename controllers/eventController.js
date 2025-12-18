@@ -226,7 +226,6 @@
 //   }
 // };
 
-
 const { Event, Registration, Wishlist, Review, User } = require('../models/associations');
 const { Op } = require('sequelize');
 const { NotificationManager } = require('../controllers/notificationController');
@@ -236,9 +235,8 @@ module.exports = {
   showAllEvents: async (req, res) => {
     try {
       const { category, search, date } = req.query;
-      const where = { status: 'upcoming' }; // Only show upcoming events by default
+      const where = { status: 'upcoming' };
 
-      // Apply filters
       if (category) where.category = category;
       if (search) {
         where[Op.or] = [
@@ -254,7 +252,6 @@ module.exports = {
         where.date = { [Op.between]: [startDate, endDate] };
       }
 
-      // Get events
       const events = await Event.findAll({
         where,
         include: [{
@@ -306,7 +303,6 @@ module.exports = {
         return res.redirect('/events');
       }
 
-      // Check if user has wishlisted this event
       let isWishlisted = false;
       if (req.session.user) {
         const wishlistItem = await Wishlist.findOne({
@@ -318,7 +314,6 @@ module.exports = {
         isWishlisted = !!wishlistItem;
       }
 
-      // Check if user is registered
       let isRegistered = false;
       let userRegistration = null;
       if (req.session.user) {
@@ -332,7 +327,6 @@ module.exports = {
         isRegistered = !!userRegistration;
       }
 
-      // Get similar events (same category)
       const similarEvents = await Event.findAll({
         where: {
           category: event.category,
@@ -344,7 +338,6 @@ module.exports = {
         order: [['date', 'ASC']]
       });
 
-      // Get reviews stats
       const reviews = event.reviews || [];
       const averageRating = reviews.length > 0 
         ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length 
@@ -368,7 +361,7 @@ module.exports = {
     }
   },
 
-  // Show create event form (organizer only)
+  // Show create event form
   showCreateForm: (req, res) => {
     res.render('events/create', {
       title: 'Create Event',
@@ -385,20 +378,17 @@ module.exports = {
         address, city, capacity, price, imageUrl, registrationDeadline 
       } = req.body;
 
-      // Validate required fields
       if (!title || !description || !category || !date || !time || !venue || !address || !city || !capacity) {
         req.flash('error', 'Please fill all required fields');
         return res.redirect('/events/create');
       }
 
-      // Validate date is in future
       const eventDate = new Date(`${date}T${time}`);
       if (eventDate < new Date()) {
         req.flash('error', 'Event date must be in the future');
         return res.redirect('/events/create');
       }
 
-      // Validate capacity
       if (capacity < 1) {
         req.flash('error', 'Capacity must be at least 1');
         return res.redirect('/events/create');
@@ -421,14 +411,12 @@ module.exports = {
         status: 'upcoming'
       };
 
-      // Add registration deadline if provided
       if (registrationDeadline) {
         eventData.registrationDeadline = new Date(registrationDeadline);
       }
 
       const newEvent = await Event.create(eventData);
       
-      // Send notification about new event
       try {
         const notificationManager = NotificationManager.getInstance();
         await notificationManager.notify('EVENT_CREATED', {
@@ -439,7 +427,6 @@ module.exports = {
         console.log('✅ Event creation notification sent');
       } catch (notifError) {
         console.error('❌ Notification error:', notifError);
-        // Don't fail the event creation if notification fails
       }
 
       req.flash('success', 'Event created successfully!');
@@ -461,13 +448,11 @@ module.exports = {
         return res.redirect('/events');
       }
 
-      // Check authorization
       if (event.organizerId !== req.session.user.userId && req.session.user.role !== 'admin') {
         req.flash('error', 'Unauthorized to edit this event');
         return res.redirect(`/events/${event.eventId}`);
       }
 
-      // Format date and time for form inputs
       const eventDate = new Date(event.date);
       const formattedDate = eventDate.toISOString().split('T')[0];
       const formattedTime = event.time || '19:00';
@@ -489,6 +474,89 @@ module.exports = {
     }
   },
 
+  // ✅ FIXED: Send event reminders function
+  sendEventReminders: async () => {
+    try {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(0, 0, 0, 0);
+
+      const dayAfterTomorrow = new Date(tomorrow);
+      dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
+
+      console.log('🕒 Looking for events between:', tomorrow, 'and', dayAfterTomorrow);
+
+      // ✅ CRITICAL FIX 1: Use proper association aliases
+      const events = await Event.findAll({
+        where: {
+          date: {
+            [Op.between]: [tomorrow, dayAfterTomorrow]
+          },
+          status: 'upcoming'
+        },
+        include: [{
+          model: Registration,
+          as: 'registrations', // Check your associations.js file - this MUST match!
+          where: { status: 'confirmed' },
+          required: false,
+          include: [{
+            model: User,
+            as: 'user' // Check your associations.js file - this MUST match!
+          }]
+        }]
+      });
+
+      console.log(`🔍 Found ${events.length} events scheduled for tomorrow`);
+
+      const notificationManager = NotificationManager.getInstance();
+      let totalRemindersSent = 0;
+
+      for (const event of events) {
+        console.log(`📅 Processing event: ${event.title} (ID: ${event.eventId})`);
+        
+        // ✅ CRITICAL FIX 2: Check if registrations exist
+        if (event.registrations && event.registrations.length > 0) {
+          console.log(`   👥 ${event.registrations.length} confirmed registrations found`);
+          
+          for (const registration of event.registrations) {
+            // ✅ CRITICAL FIX 3: Check if user object exists and has email
+            if (registration.user && registration.user.email) {
+              console.log(`   📧 Sending reminder to: ${registration.user.email}`);
+              
+              await notificationManager.notify('EVENT_REMINDER', {
+                eventId: event.eventId,
+                title: event.title,
+                userEmail: registration.user.email // ✅ Now correctly passed
+              });
+              
+              totalRemindersSent++;
+              console.log(`   ✅ Reminder queued for: ${registration.user.email}`);
+            } else {
+              console.log(`   ⚠️  User object or email missing for registration ID: ${registration.registrationId}`);
+            }
+          }
+        } else {
+          console.log(`   ℹ️  No confirmed registrations for this event`);
+        }
+      }
+
+      console.log(`🎉 Total reminders sent: ${totalRemindersSent} from ${events.length} events`);
+      return { 
+        success: true, 
+        totalEvents: events.length, 
+        totalReminders: totalRemindersSent 
+      };
+    } catch (error) {
+      console.error('❌ Error in sendEventReminders:', error);
+      console.error('❌ Error details:', error.message);
+      console.error('❌ Error stack:', error.stack);
+      return { 
+        success: false, 
+        error: error.message 
+      };
+    }
+  },
+
   // Update event
   updateEvent: async (req, res) => {
     try {
@@ -499,7 +567,6 @@ module.exports = {
         return res.redirect('/events');
       }
 
-      // Check authorization
       if (event.organizerId !== req.session.user.userId && req.session.user.role !== 'admin') {
         req.flash('error', 'Unauthorized to update this event');
         return res.redirect(`/events/${event.eventId}`);
@@ -510,13 +577,11 @@ module.exports = {
         address, city, capacity, price, imageUrl, status, registrationDeadline 
       } = req.body;
 
-      // Validate capacity if changed
       if (capacity && capacity < event.registrations) {
         req.flash('error', `Capacity cannot be less than current registrations (${event.registrations})`);
         return res.redirect(`/events/${event.eventId}/edit`);
       }
 
-      // Update available seats if capacity changed
       let availableSeats = event.availableSeats;
       if (capacity && capacity !== event.capacity) {
         const capacityDiff = parseInt(capacity) - event.capacity;
@@ -542,7 +607,6 @@ module.exports = {
 
       await event.update(updateData);
       
-      // Send notification about event update
       try {
         const notificationManager = NotificationManager.getInstance();
         await notificationManager.notify('EVENT_UPDATED', {
@@ -573,13 +637,11 @@ module.exports = {
         return res.redirect('/events');
       }
 
-      // Check authorization
       if (event.organizerId !== req.session.user.userId && req.session.user.role !== 'admin') {
         req.flash('error', 'Unauthorized to delete this event');
         return res.redirect(`/events/${event.eventId}`);
       }
 
-      // Check if there are registrations
       const registrationsCount = await Registration.count({
         where: { eventId: event.eventId, status: 'confirmed' }
       });
@@ -599,7 +661,7 @@ module.exports = {
     }
   },
 
-  // Manage event (organizer view)
+  // Manage event
   manageEvent: async (req, res) => {
     try {
       const event = await Event.findByPk(req.params.eventId, {
@@ -619,13 +681,11 @@ module.exports = {
         return res.redirect('/events');
       }
 
-      // Check authorization
       if (event.organizerId !== req.session.user.userId && req.session.user.role !== 'admin') {
         req.flash('error', 'Unauthorized to manage this event');
         return res.redirect(`/events/${event.eventId}`);
       }
 
-      // Calculate stats
       const totalRegistrations = event.registrations.length;
       const confirmedRegistrations = event.registrations.filter(r => r.status === 'confirmed').length;
       const totalRevenue = event.registrations
@@ -664,7 +724,6 @@ module.exports = {
         return res.redirect('/events');
       }
 
-      // Check authorization
       if (event.organizerId !== req.session.user.userId && req.session.user.role !== 'admin') {
         req.flash('error', 'Unauthorized to update this event');
         return res.redirect(`/events/${event.eventId}`);

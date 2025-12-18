@@ -1,7 +1,7 @@
 //Observer Pattern
 const { Notification, Event, Registration, User } = require('../models/associations');
 const { Op } = require('sequelize');
-
+const nodemailer = require('nodemailer');
 // Observer Pattern Implementation
 class NotificationObserver {
   constructor() {
@@ -23,11 +23,63 @@ class NotificationObserver {
   }
 }
 
-// Concrete Observer: Email Notification
+
 class EmailNotificationService {
+  constructor() {
+    // 1. Configure the transporter with YOUR Brevo SMTP credentials
+    this.transporter = nodemailer.createTransport({
+      host: 'smtp-relay.brevo.com',
+      port: 587, // Use 587 or 2525
+      secure: false, // true for 465, false for other ports
+      auth: {
+        user: '9e4c8b001@smtp-brevo.com', // e.g., your-email@example.com
+        pass: 'AGm713YL6XsK8VxR' // The specific SMTP key you generated
+      }
+    });
+  }
+
   async update(eventType, data) {
-    console.log(`[Email] ${eventType}:`, data);
-    // In real app, send email here
+    // Get user email (you need to fetch the user in your real code)
+    // For now, let's assume 'data' contains the user's email for a confirmation
+    const userEmail = data.userEmail; // You need to pass this in your notify() call
+
+    if (!userEmail) {
+      console.error('No email found for user in data:', data);
+      return;
+    }
+
+    // 2. Determine email content based on the event
+    let mailOptions = {};
+    switch (eventType) {
+      case 'REGISTRATION_CONFIRMED':
+        mailOptions = {
+          from: '"EventHub" <noreply@yourdomain.com>', // Use your verified sender
+          to: userEmail,
+          subject: `Registration Confirmed: ${data.eventTitle}`,
+          text: `Your registration for "${data.eventTitle}" has been confirmed.`,
+          html: `<p>Your registration for <strong>${data.eventTitle}</strong> has been confirmed.</p>`
+        };
+        break;
+      case 'EVENT_REMINDER':
+        mailOptions = {
+          from: '"EventHub" <noreply@yourdomain.com>',
+          to: userEmail,
+          subject: `Reminder: ${data.eventTitle} is Tomorrow!`,
+          text: `Don't forget about "${data.eventTitle}" tomorrow!`,
+          html: `<p>Reminder: <strong>${data.eventTitle}</strong> is happening tomorrow!</p>`
+        };
+        break;
+      // Add more cases for EVENT_UPDATED, etc.
+    }
+
+    // 3. Send the email
+    try {
+      let info = await this.transporter.sendMail(mailOptions);
+      console.log(`[Email Sent] ${eventType} to ${userEmail}:`, info.messageId);
+      // You can log this info to Brevo's dashboard later
+    } catch (error) {
+      console.error(`[Email Error] ${eventType}:`, error);
+    }
   }
 }
 

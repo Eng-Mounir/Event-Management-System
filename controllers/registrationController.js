@@ -138,7 +138,10 @@
 //       res.redirect('/users/registrations');
 //     }
 //   }
-// };
+// };// registrationController.js - FULLY CORRECTED VERSION
+
+// 1. IMPORT Op AT THE TOP
+const { Op } = require('sequelize');
 const { Registration, Event } = require('../models/associations');
 const { NotificationManager } = require('../controllers/notificationController');
 
@@ -174,7 +177,7 @@ module.exports = {
         where: {
           eventId: event.eventId,
           userId: req.session.user.userId,
-          status: { [Op.in]: ['confirmed', 'pending'] }
+          status: { [Op.in]: ['confirmed', 'pending'] }  // FIXED: Op is now defined
         }
       });
 
@@ -208,7 +211,10 @@ module.exports = {
         req.flash('error', 'Event not found');
         return res.redirect('/events');
       }
-
+       if (event.price > 0) {
+      req.flash('error', 'This event requires payment. Redirecting to checkout...');
+      return res.redirect(`/payments/checkout?eventId=${eventId}&quantity=${ticketQuantity || 1}`);
+    }
       // Validate ticket quantity
       const ticketQty = parseInt(ticketQuantity) || 1;
       if (ticketQty < 1) {
@@ -238,7 +244,7 @@ module.exports = {
         where: {
           eventId,
           userId: req.session.user.userId,
-          status: { [Op.in]: ['confirmed', 'pending'] }
+          status: { [Op.in]: ['confirmed', 'pending'] }  // FIXED: Op is now defined
         }
       });
 
@@ -484,7 +490,7 @@ module.exports = {
         where: {
           eventId,
           userId: req.session.user.userId,
-          status: { [Op.in]: ['confirmed', 'pending'] }
+          status: { [Op.in]: ['confirmed', 'pending'] }  // FIXED: Op is now defined
         },
         include: [{
           model: Event,
