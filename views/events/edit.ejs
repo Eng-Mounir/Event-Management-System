@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %> | EventHub</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary: #4361ee;
+            --secondary: #3a0ca3;
+            --gradient: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%);
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+            min-height: 100vh;
+        }
+        
+        .navbar-brand {
+            font-family: 'Poppins', sans-serif;
+            font-weight: 700;
+            font-size: 1.8rem;
+            background: var(--gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+            margin-bottom: 20px;
+        }
+        
+        .btn-primary {
+            background: var(--gradient);
+            border: none;
+            padding: 12px 30px;
+            border-radius: 50px;
+        }
+        
+        .btn-primary:hover {
+            opacity: 0.9;
+        }
+        
+        .form-control:focus {
+            border-color: #4361ee;
+            box-shadow: 0 0 0 0.2rem rgba(67, 97, 238, 0.25);
+        }
+        
+        .required:after {
+            content: " *";
+            color: #dc3545;
+        }
+        
+        /* Memento History Styles */
+        .memento-history {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .timeline {
+            position: relative;
+            padding-left: 20px;
+        }
+        
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 7px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #e9ecef;
+        }
+        
+        .timeline-item {
+            position: relative;
+            margin-bottom: 1rem;
+            padding-left: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .timeline-item:hover {
+            background-color: rgba(0, 0, 0, 0.02);
+            transform: translateX(5px);
+        }
+        
+        .timeline-item.current {
+            border-left: 3px solid #4361ee;
+            background-color: rgba(67, 97, 238, 0.05);
+            padding-left: 12px;
+            margin-left: -12px;
+            padding: 8px;
+            border-radius: 5px;
+        }
+        
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -3px;
+            top: 10px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #6c757d;
+        }
+        
+        .timeline-item.current::before {
+            background: #4361ee;
+            width: 12px;
+            height: 12px;
+            left: -4px;
+        }
+        
+        /* Highlight changed fields */
+        .field-changed {
+            background-color: rgba(255, 193, 7, 0.1) !important;
+            border-left: 3px solid #ffc107 !important;
+            animation: highlight 2s ease;
+        }
+        
+        @keyframes highlight {
+            0% { background-color: rgba(255, 193, 7, 0.3); }
+            100% { background-color: rgba(255, 193, 7, 0.1); }
+        }
+        
+        /* Loading spinner */
+        .spinner-border-sm {
+            width: 1rem;
+            height: 1rem;
+            border-width: 0.2em;
+        }
+        
+        /* Version badge */
+        .version-badge {
+            font-size: 0.7rem;
+            padding: 0.2rem 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-white sticky-top shadow-sm">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-calendar-event me-2"></i>EventHub
+            </a>
+            
+            <div class="collapse navbar-collapse">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/dashboard">
+                            <i class="bi bi-speedometer2"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/events">
+                            <i class="bi bi-calendar3"></i> Events
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/events/<%= event.eventId %>">
+                            <i class="bi bi-arrow-left"></i> Back to Event
+                        </a>
+                    </li>
+                </ul>
+                
+                <div class="d-flex align-items-center">
+                    <div class="dropdown">
+                        <a href="#" class="d-flex align-items-center text-decoration-none dropdown-toggle" 
+                           data-bs-toggle="dropdown">
+                            <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center" 
+                                 style="width: 40px; height: 40px; color: white; font-weight: 600;">
+                                <%= user.name.charAt(0).toUpperCase() %>
+                            </div>
+                            <span class="ms-2"><%= user.name %></span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="/dashboard">
+                                <i class="bi bi-speedometer2 me-2"></i>Dashboard
+                            </a></li>
+                            <li><a class="dropdown-item" href="/auth/profile">
+                                <i class="bi bi-person-circle me-2"></i>Profile
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="/auth/logout">
+                                <i class="bi bi-box-arrow-right me-2"></i>Logout
+                            </a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Flash Messages -->
+    <% if (success) { %>
+        <div class="container mt-3">
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="bi bi-check-circle-fill me-2"></i>
+                <%= success %>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        </div>
+    <% } %>
+    
+    <% if (error) { %>
+        <div class="container mt-3">
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                <%= error %>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        </div>
+    <% } %>
+
+    <!-- Main Content -->
+    <main>
+        <div class="container py-5">
+            <div class="row justify-content-center">
+                <div class="col-lg-10">
+                    <div class="card">
+                        <div class="card-header bg-white py-4">
+                            <h2 class="fw-bold mb-0">
+                                <i class="bi bi-pencil-square me-2"></i>Edit Event: <%= event.title %>
+                            </h2>
+                            <p class="text-muted mb-0 mt-2">Update your event details below</p>
+                        </div>
+                        
+                        <div class="card-body p-5">
+                            <!-- Status Alert for Undo/Redo -->
+                            <div class="alert alert-info" id="undoRedoStatus" style="display: none;">
+                                <i class="bi bi-info-circle me-2"></i>
+                                <span id="statusMessage"></span>
+                            </div>
+                            
+                            <form action="/events/<%= event.eventId %>?_method=PUT" 
+                                  method="POST" 
+                                  enctype="application/x-www-form-urlencoded"
+                                  id="editEventForm"
+                                  onsubmit="return validateForm()">
+                                  
+                                <div class="row g-4">
+                                    <!-- Basic Information -->
+                                    <div class="col-12">
+                                        <h5 class="fw-bold mb-3 border-bottom pb-2">
+                                            <i class="bi bi-info-circle me-2"></i>Basic Information
+                                        </h5>
+                                    </div>
+                                    
+                                    <div class="col-md-6">
+                                        <label class="form-label required">Event Title</label>
+                                        <input type="text" class="form-control" name="title" 
+                                               id="titleInput"
+                                               value="<%= event.title %>" 
+                                               minlength="5"
+                                               required>
+                                        <div class="invalid-feedback">
+                                            Title must be at least 5 characters
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-md-6">
+                                        <label class="form-label required">Category</label>
+                                        <select class="form-select" name="category" id="categoryInput" required>
+                                            <% categories.forEach(cat => { %>
+                                                <option value="<%= cat %>" 
+                                                    <%= event.category === cat ? 'selected' : '' %>>
+                                                    <%= cat.charAt(0).toUpperCase() + cat.slice(1) %>
+                                                </option>
+                                            <% }) %>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="col-12">
+                                        <label class="form-label required">Description</label>
+                                        <textarea class="form-control" name="description" id="descriptionInput" rows="4" minlength="20" required><%= event.description %></textarea>
+                                        <div class="invalid-feedback">
+                                            Description must be at least 20 characters
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Date & Time -->
+                                    <div class="col-12 mt-4">
+                                        <h5 class="fw-bold mb-3 border-bottom pb-2">
+                                            <i class="bi bi-calendar3 me-2"></i>Date & Time
+                                        </h5>
+                                    </div>
+                                    
+                                    <div class="col-md-6">
+                                        <label class="form-label required">Date</label>
+                                        <input type="date" class="form-control" name="date" 
+                                               id="dateInput"
+                                               value="<%= event.date %>" required>
+                                    </div>
+                                    
+                                    <div class="col-md-6">
+                                        <label class="form-label required">Time</label>
+                                        <input type="time" class="form-control" name="time" 
+                                               id="timeInput"
+                                               value="<%= event.time %>" required>
+                                    </div>
+                                    
+                                    <div class="col-md-6">
+                                        <label class="form-label">Registration Deadline</label>
+                                        <input type="datetime-local" class="form-control" name="registrationDeadline" id="registrationDeadlineInput"
+                                               value="<%= event.registrationDeadline ? new Date(event.registrationDeadline).toISOString().slice(0, 16) : '' %>">
+                                    </div>
+                                    
+                                    <!-- Venue Information -->
+                                    <div class="col-12 mt-4">
+                                        <h5 class="fw-bold mb-3 border-bottom pb-2">
+                                            <i class="bi bi-geo-alt me-2"></i>Venue Information
+                                        </h5>
+                                    </div>
+                                    
+                                    <div class="col-md-6">
+                                        <label class="form-label required">Venue Name</label>
+                                        <input type="text" class="form-control" name="venue" 
+                                               id="venueInput"
+                                               value="<%= event.venue %>" required>
+                                    </div>
+                                    
+                                    <div class="col-md-6">
+                                        <label class="form-label required">City</label>
+                                        <input type="text" class="form-control" name="city" 
+                                               id="cityInput"
+                                               value="<%= event.city %>" required>
+                                    </div>
+                                    
+                                    <div class="col-12">
+                                        <label class="form-label required">Address</label>
+                                        <textarea class="form-control" name="address" id="addressInput" rows="2" required><%= event.address %></textarea>
+                                    </div>
+                                    
+                                    <!-- Capacity & Pricing -->
+                                    <div class="col-12 mt-4">
+                                        <h5 class="fw-bold mb-3 border-bottom pb-2">
+                                            <i class="bi bi-people me-2"></i>Capacity & Pricing
+                                        </h5>
+                                    </div>
+                                    
+                                    <div class="col-md-6">
+                                        <label class="form-label required">Total Capacity</label>
+                                        <input type="number" class="form-control" name="capacity" 
+                                               id="capacityInput"
+                                               value="<%= event.capacity %>" min="1" required>
+                                        <small class="text-muted">Current available seats: <%= event.availableSeats %></small>
+                                    </div>
+                                    
+                                    <div class="col-md-6">
+                                        <label class="form-label required">Price per Ticket ($)</label>
+                                        <input type="number" class="form-control" name="price" 
+                                               id="priceInput"
+                                               value="<%= event.price %>" min="0" step="0.01" required>
+                                        <small class="text-muted">Enter 0 for free events</small>
+                                    </div>
+                                    
+                                    <!-- Image & Status -->
+                                    <div class="col-12 mt-4">
+                                        <h5 class="fw-bold mb-3 border-bottom pb-2">
+                                            <i class="bi bi-image me-2"></i>Event Image & Status
+                                        </h5>
+                                    </div>
+                                    
+                                    <div class="col-md-6">
+                                        <label class="form-label">Event Image URL</label>
+                                        <input type="text" class="form-control" name="imageUrl" id="imageUrlInput"
+                                               value="<%= event.imageUrl %>">
+                                        <% if (event.imageUrl && event.imageUrl !== '/images/default-event.jpg') { %>
+                                            <div class="mt-2">
+                                                <img src="<%= event.imageUrl %>" alt="Current event image" 
+                                                     class="img-fluid rounded" style="max-height: 100px;">
+                                            </div>
+                                        <% } %>
+                                    </div>
+                                    
+                                    <div class="col-md-6">
+                                        <label class="form-label">Event Status</label>
+                                        <select class="form-select" name="status" id="statusInput">
+                                            <option value="upcoming" <%= event.status === 'upcoming' ? 'selected' : '' %>>Upcoming</option>
+                                            <option value="cancelled" <%= event.status === 'cancelled' ? 'selected' : '' %>>Cancelled</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <!-- Memento History Section -->
+                                    <div class="col-12 mt-4">
+                                        <div class="card border-info">
+                                            <div class="card-header bg-info bg-opacity-10">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <h6 class="fw-bold mb-0">
+                                                        <i class="bi bi-clock-history me-2"></i>Edit History (Memento Pattern)
+                                                        <% if (mementoHistory && mementoHistory.length > 0) { %>
+                                                            <span class="badge bg-primary version-badge ms-2">
+                                                                <%= mementoHistory.length %> versions
+                                                            </span>
+                                                        <% } %>
+                                                    </h6>
+                                                    <div class="d-flex gap-2">
+                                                        <button type="button" class="btn btn-outline-dark btn-sm" 
+                                                                id="undoBtn" <%= !canUndo ? 'disabled' : '' %>>
+                                                            <i class="bi bi-arrow-counterclockwise me-1"></i> Undo
+                                                        </button>
+                                                        <button type="button" class="btn btn-outline-dark btn-sm" 
+                                                                id="redoBtn" <%= !canRedo ? 'disabled' : '' %>>
+                                                            <i class="bi bi-arrow-clockwise me-1"></i> Redo
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="card-body">
+                                                <% if (mementoHistory && mementoHistory.length > 0) { %>
+                                                    <div class="memento-history">
+                                                        <div class="timeline">
+                                                            <% mementoHistory.forEach((history, index) => { %>
+                                                                <div class="timeline-item <%= history.isCurrent ? 'current' : '' %>" 
+                                                                     data-version="<%= index + 1 %>"
+                                                                     data-timestamp="<%= history.timestamp %>"
+                                                                     onclick="loadVersion(<%= index + 1 %>)">
+                                                                    <div class="d-flex justify-content-between align-items-center">
+                                                                        <div>
+                                                                            <strong>
+                                                                                <i class="bi bi-circle-fill me-2" style="font-size: 0.5rem;"></i>
+                                                                                Version <%= index + 1 %>
+                                                                                <% if (history.isCurrent) { %>
+                                                                                    <span class="badge bg-primary ms-2">Current</span>
+                                                                                <% } %>
+                                                                            </strong>
+                                                                            <div class="version-info">
+                                                                                <% if (index === mementoHistory.length - 1) { %>
+                                                                                    <i class="bi bi-flag"></i> Initial version
+                                                                                <% } else if (index === 0) { %>
+                                                                                    <i class="bi bi-star"></i> Latest version
+                                                                                <% } else { %>
+                                                                                    <i class="bi bi-save"></i> Saved changes
+                                                                                <% } %>
+                                                                            </div>
+                                                                        </div>
+                                                                        <span class="text-muted" style="font-size: 0.85rem;">
+                                                                            <%= new Date(history.timestamp).toLocaleString() %>
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            <% }) %>
+                                                        </div>
+                                                    </div>
+                                                <% } else { %>
+                                                    <div class="text-center py-3">
+                                                        <i class="bi bi-clock-history text-muted" style="font-size: 2rem;"></i>
+                                                        <p class="text-muted mt-2 mb-0">No edit history yet</p>
+                                                        <small class="text-muted">Changes will be recorded here after you save</small>
+                                                    </div>
+                                                <% } %>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Form Actions -->
+                                    <div class="col-12 mt-5">
+                                        <div class="d-flex justify-content-between">
+                                            <div>
+                                                <a href="/events/<%= event.eventId %>" class="btn btn-outline-secondary">
+                                                    <i class="bi bi-x-circle me-2"></i>Cancel
+                                                </a>
+                                                <a href="/events/<%= event.eventId %>/manage" class="btn btn-outline-info ms-2">
+                                                    <i class="bi bi-gear me-2"></i>Manage Event
+                                                </a>
+                                            </div>
+                                            <div>
+                                                <button type="submit" class="btn btn-primary" id="submitBtn">
+                                                    <i class="bi bi-check-circle me-2"></i>Update Event
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                    
+                    <!-- Danger Zone -->
+                    <div class="card border-danger mt-4">
+                        <div class="card-header bg-danger bg-opacity-10 text-danger">
+                            <h5 class="fw-bold mb-0">
+                                <i class="bi bi-exclamation-triangle me-2"></i>Danger Zone
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col-md-8">
+                                    <h6 class="fw-bold">Delete Event</h6>
+                                    <p class="text-muted mb-0">
+                                        Once you delete an event, there is no going back. Please be certain.
+                                    </p>
+                                </div>
+                                <div class="col-md-4 text-end">
+                                    <form action="/events/<%= event.eventId %>?_method=DELETE" method="POST" 
+                                          onsubmit="return confirm('⚠️ WARNING: This will permanently delete the event and all associated data.\\n\\nAre you absolutely sure?')">
+                                        <button type="submit" class="btn btn-danger">
+                                            <i class="bi bi-trash me-2"></i>Delete Event
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // AJAX Undo/Redo functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const undoBtn = document.getElementById('undoBtn');
+            const redoBtn = document.getElementById('redoBtn');
+            const statusAlert = document.getElementById('undoRedoStatus');
+            const statusMessage = document.getElementById('statusMessage');
+            const eventId = '<%= event.eventId %>';
+            
+            // Store original form values for comparison
+            const originalValues = {
+                title: document.getElementById('titleInput').value,
+                description: document.getElementById('descriptionInput').value,
+                category: document.getElementById('categoryInput').value,
+                date: document.getElementById('dateInput').value,
+                time: document.getElementById('timeInput').value,
+                venue: document.getElementById('venueInput').value,
+                city: document.getElementById('cityInput').value,
+                address: document.getElementById('addressInput').value,
+                capacity: document.getElementById('capacityInput').value,
+                price: document.getElementById('priceInput').value,
+                imageUrl: document.getElementById('imageUrlInput').value,
+                status: document.getElementById('statusInput').value
+            };
+            
+            // Function to show status message
+            function showStatus(message, type = 'info') {
+                statusMessage.textContent = message;
+                statusAlert.className = `alert alert-${type}`;
+                statusAlert.style.display = 'block';
+                
+                // Auto-hide after 3 seconds
+                setTimeout(() => {
+                    statusAlert.style.display = 'none';
+                }, 3000);
+            }
+            
+            // Function to update button states
+            function updateButtonStates() {
+                // This would ideally be updated via AJAX, but for now we'll reload
+                // In a real app, you'd fetch the current state from the server
+                console.log('Buttons would be updated here');
+            }
+            
+            // Undo button click
+            if (undoBtn) {
+                undoBtn.addEventListener('click', async function() {
+                    if (this.disabled) return;
+                    
+                    const originalText = this.innerHTML;
+                    this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Undoing...';
+                    this.disabled = true;
+                    
+                    showStatus('Undoing changes...', 'info');
+                    
+                    try {
+                        const response = await fetch(`/events/${eventId}/undo`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            showStatus('✅ Undo successful! Page will refresh...', 'success');
+                            
+                            // Refresh page after 1.5 seconds to show changes
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 1500);
+                        } else {
+                            const error = await response.text();
+                            throw new Error(error || 'Undo failed');
+                        }
+                    } catch (error) {
+                        console.error('Undo error:', error);
+                        showStatus('❌ Undo failed. Please try again.', 'danger');
+                        this.innerHTML = originalText;
+                        this.disabled = false;
+                    }
+                });
+            }
+            
+            // Redo button click
+            if (redoBtn) {
+                redoBtn.addEventListener('click', async function() {
+                    if (this.disabled) return;
+                    
+                    const originalText = this.innerHTML;
+                    this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Redoing...';
+                    this.disabled = true;
+                    
+                    showStatus('Redoing changes...', 'info');
+                    
+                    try {
+                        const response = await fetch(`/events/${eventId}/redo`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            showStatus('✅ Redo successful! Page will refresh...', 'success');
+                            
+                            // Refresh page after 1.5 seconds to show changes
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 1500);
+                        } else {
+                            const error = await response.text();
+                            throw new Error(error || 'Redo failed');
+                        }
+                    } catch (error) {
+                        console.error('Redo error:', error);
+                        showStatus('❌ Redo failed. Please try again.', 'danger');
+                        this.innerHTML = originalText;
+                        this.disabled = false;
+                    }
+                });
+            }
+            
+            // Function to load a specific version (optional feature)
+            window.loadVersion = async function(versionNumber) {
+                if (!confirm(`Load version ${versionNumber}? This will replace your current changes.`)) {
+                    return;
+                }
+                
+                showStatus(`Loading version ${versionNumber}...`, 'info');
+                
+                try {
+                    // This would be an API call to load a specific version
+                    // For now, we'll just show a message
+                    showStatus('⏳ Version loading feature coming soon!', 'warning');
+                    
+                    // In a full implementation, you would:
+                    // 1. Call an API endpoint to get the version data
+                    // 2. Update form fields with the version data
+                    // 3. Highlight changed fields
+                    
+                } catch (error) {
+                    console.error('Load version error:', error);
+                    showStatus('❌ Failed to load version', 'danger');
+                }
+            };
+            
+            // Keyboard shortcuts for Undo/Redo
+            document.addEventListener('keydown', function(e) {
+                // Ctrl+Z for Undo
+                if (e.ctrlKey && e.key === 'z') {
+                    e.preventDefault();
+                    if (undoBtn && !undoBtn.disabled) {
+                        undoBtn.click();
+                    }
+                }
+                
+                // Ctrl+Y for Redo
+                if (e.ctrlKey && e.key === 'y') {
+                    e.preventDefault();
+                    if (redoBtn && !redoBtn.disabled) {
+                        redoBtn.click();
+                    }
+                }
+            });
+            
+            // Highlight changed fields
+            function highlightChangedFields() {
+                const fields = [
+                    'titleInput', 'descriptionInput', 'categoryInput', 'dateInput',
+                    'timeInput', 'venueInput', 'cityInput', 'addressInput',
+                    'capacityInput', 'priceInput', 'imageUrlInput', 'statusInput'
+                ];
+                
+                fields.forEach(fieldId => {
+                    const field = document.getElementById(fieldId);
+                    if (field) {
+                        const currentValue = field.value;
+                        const originalValue = originalValues[fieldId.replace('Input', '')] || '';
+                        
+                        if (currentValue !== originalValue) {
+                            field.classList.add('field-changed');
+                            
+                            // Remove highlight after 5 seconds
+                            setTimeout(() => {
+                                field.classList.remove('field-changed');
+                            }, 5000);
+                        }
+                    }
+                });
+            }
+            
+            // Auto-highlight changed fields on page load
+            setTimeout(highlightChangedFields, 500);
+            
+            // Form validation and debugging
+            window.validateForm = function() {
+                console.log('📝 Form submission validation started...');
+                
+                const form = document.getElementById('editEventForm');
+                const titleInput = document.getElementById('titleInput');
+                const descriptionInput = document.getElementById('descriptionInput');
+                
+                // Check title
+                if (titleInput.value.trim().length < 5) {
+                    console.error('❌ Title validation failed:', titleInput.value);
+                    titleInput.classList.add('is-invalid');
+                    alert('Title must be at least 5 characters');
+                    return false;
+                } else {
+                    titleInput.classList.remove('is-invalid');
+                    console.log('✅ Title valid:', titleInput.value);
+                }
+                
+                // Check description
+                if (descriptionInput.value.trim().length < 20) {
+                    console.error('❌ Description validation failed:', descriptionInput.value);
+                    descriptionInput.classList.add('is-invalid');
+                    alert('Description must be at least 20 characters');
+                    return false;
+                } else {
+                    descriptionInput.classList.remove('is-invalid');
+                    console.log('✅ Description valid');
+                }
+                
+                // Debug: Show all form data
+                const formData = new FormData(form);
+                console.log('📋 Form data to be submitted:');
+                for (let [key, value] of formData.entries()) {
+                    console.log(`${key}: ${value}`);
+                }
+                
+                // Check if form is valid
+                if (!form.checkValidity()) {
+                    console.error('❌ Form is not valid');
+                    form.classList.add('was-validated');
+                    return false;
+                }
+                
+                console.log('✅ Form validation passed, submitting...');
+                return true;
+            };
+            
+            // Real-time validation
+            const titleInput = document.getElementById('titleInput');
+            const descriptionInput = document.getElementById('descriptionInput');
+            
+            if (titleInput) {
+                titleInput.addEventListener('input', function() {
+                    const isValid = this.value.trim().length >= 5;
+                    if (isValid) {
+                        this.classList.remove('is-invalid');
+                        this.classList.add('is-valid');
+                    } else {
+                        this.classList.remove('is-valid');
+                        this.classList.add('is-invalid');
+                    }
+                });
+            }
+            
+            if (descriptionInput) {
+                descriptionInput.addEventListener('input', function() {
+                    const isValid = this.value.trim().length >= 20;
+                    if (isValid) {
+                        this.classList.remove('is-invalid');
+                        this.classList.add('is-valid');
+                    } else {
+                        this.classList.remove('is-valid');
+                        this.classList.add('is-invalid');
+                    }
+                });
+            }
+            
+            // Date validation - prevent past dates
+            const dateInput = document.getElementById('dateInput');
+            const today = new Date().toISOString().split('T')[0];
+            if (dateInput) {
+                dateInput.min = today;
+            }
+            
+            // Time validation
+            const timeInput = document.getElementById('timeInput');
+            const now = new Date();
+            
+            if (dateInput && timeInput) {
+                dateInput.addEventListener('change', function() {
+                    if (this.value === today) {
+                        const currentHour = now.getHours().toString().padStart(2, '0');
+                        const currentMinute = now.getMinutes().toString().padStart(2, '0');
+                        timeInput.min = `${currentHour}:${currentMinute}`;
+                    } else {
+                        timeInput.removeAttribute('min');
+                    }
+                });
+                
+                // Initialize time min if date is today on page load
+                if (dateInput.value === today) {
+                    const currentHour = now.getHours().toString().padStart(2, '0');
+                    const currentMinute = now.getMinutes().toString().padStart(2, '0');
+                    timeInput.min = `${currentHour}:${currentMinute}`;
+                }
+            }
+            
+            // Debug: Log initial form values
+            console.log('📝 Memento Debug Info:');
+            console.log('Event ID:', eventId);
+            console.log('Can Undo:', <%= canUndo %>);
+            console.log('Can Redo:', <%= canRedo %>);
+            console.log('Total Versions:', <%= mementoHistory ? mementoHistory.length : 0 %>);
+            
+            // Display Memento instructions
+            console.log('💡 Memento Usage:');
+            console.log('1. Make changes to the form');
+            console.log('2. Click "Update Event" to save a version');
+            console.log('3. Use Undo/Redo buttons to navigate through history');
+            console.log('4. Click on a version in the timeline to load it (coming soon)');
+        });
+    </script>
+</body>
+</html>

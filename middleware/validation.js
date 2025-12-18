@@ -89,6 +89,8 @@ const { validationResult } = require('express-validator');
 module.exports = {
   // Simple validation for registration
   validateRegistration: (req, res, next) => {
+    console.log('🔍 Registration validation - Request body:', req.body);
+    
     const errors = [];
     const { name, email, password, confirmPassword } = req.body;
     
@@ -109,6 +111,7 @@ module.exports = {
     }
     
     if (errors.length > 0) {
+      console.log('❌ Registration validation errors:', errors);
       errors.forEach(error => req.flash('error', error));
       return res.redirect('/auth/register');
     }
@@ -137,7 +140,7 @@ module.exports = {
     next();
   },
   
-  // Handle validation errors
+  // Handle validation errors for express-validator
   handleValidationErrors: (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -147,148 +150,76 @@ module.exports = {
       return res.redirect('back');
     }
     next();
-  }
-};
-
-
-// Add these functions to your existing validation.js file:
-
-  // Simple validation for event creation
+  },
+  
+  // Simple validation for event creation/update
   validateEvent: (req, res, next) => {
-    const errors = [];
-    const { title, description, category, date, capacity, price } = req.body;
+    console.log('🔍 Event validation started...');
+    console.log('📝 Request body:', req.body);
+    console.log('📝 Title value:', req.body.title);
+    console.log('📝 Title length:', req.body.title ? req.body.title.length : 0);
+    console.log('📝 Title trimmed length:', req.body.title ? req.body.title.trim().length : 0);
     
-    if (!title || title.trim().length < 5) {
+    const errors = [];
+    const { title, description, category, date, capacity, price, time, venue, address, city } = req.body;
+    
+    // Title validation
+    if (!title) {
+      errors.push('Title is required');
+      console.log('❌ Title is empty');
+    } else if (title.trim().length < 5) {
       errors.push('Title must be at least 5 characters');
+      console.log('❌ Title too short:', title.trim().length);
+    } else {
+      console.log('✅ Title passed validation:', title);
     }
     
+    // Description validation
     if (!description || description.trim().length < 20) {
       errors.push('Description must be at least 20 characters');
     }
     
+    // Category validation
     const validCategories = ['concert', 'conference', 'workshop', 'sports', 'festival', 'exhibition'];
     if (!category || !validCategories.includes(category)) {
       errors.push('Invalid category selected');
     }
     
+    // Date validation
     if (!date || isNaN(new Date(date).getTime())) {
       errors.push('Valid date is required');
+    } else {
+      const eventDate = new Date(date + 'T' + (time || '00:00'));
+      const today = new Date();
+      if (eventDate < today) {
+        errors.push('Event date must be in the future');
+      }
     }
     
+    // Required fields for events
+    if (!time) errors.push('Time is required');
+    if (!venue) errors.push('Venue is required');
+    if (!address) errors.push('Address is required');
+    if (!city) errors.push('City is required');
+    
+    // Capacity validation
     if (!capacity || capacity < 1) {
       errors.push('Capacity must be at least 1');
     }
     
-    if (!price || price < 0) {
+    // Price validation
+    const priceNum = parseFloat(price);
+    if (isNaN(priceNum) || priceNum < 0) {
       errors.push('Price must be a positive number');
     }
     
     if (errors.length > 0) {
+      console.log('❌ Event validation errors:', errors);
       errors.forEach(error => req.flash('error', error));
       return res.redirect('back');
     }
     
-    next();
-  },
-module.exports = {
-  // Simple validation for registration
-  validateRegistration: (req, res, next) => {
-    const errors = [];
-    const { name, email, password, confirmPassword } = req.body;
-    
-    if (!name || name.trim().length < 2) {
-      errors.push('Name must be at least 2 characters');
-    }
-    
-    if (!email || !email.includes('@')) {
-      errors.push('Valid email is required');
-    }
-    
-    if (!password || password.length < 6) {
-      errors.push('Password must be at least 6 characters');
-    }
-    
-    if (password !== confirmPassword) {
-      errors.push('Passwords do not match');
-    }
-    
-    if (errors.length > 0) {
-      errors.forEach(error => req.flash('error', error));
-      return res.redirect('/auth/register');
-    }
-    
-    next();
-  },
-  
-  // Simple validation for login
-  validateLogin: (req, res, next) => {
-    const errors = [];
-    const { email, password } = req.body;
-    
-    if (!email || !email.includes('@')) {
-      errors.push('Valid email is required');
-    }
-    
-    if (!password || password.length < 1) {
-      errors.push('Password is required');
-    }
-    
-    if (errors.length > 0) {
-      errors.forEach(error => req.flash('error', error));
-      return res.redirect('/auth/login');
-    }
-    
-    next();
-  },
-  
-  // Handle validation errors
-  handleValidationErrors: (req, res, next) => {
-    const { validationResult } = require('express-validator');
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      errors.array().forEach(error => {
-        req.flash('error', error.msg);
-      });
-      return res.redirect('back');
-    }
-    next();
-  },
-  
-  // Simple validation for event creation
-  validateEvent: (req, res, next) => {
-    const errors = [];
-    const { title, description, category, date, capacity, price } = req.body;
-    
-    if (!title || title.trim().length < 5) {
-      errors.push('Title must be at least 5 characters');
-    }
-    
-    if (!description || description.trim().length < 20) {
-      errors.push('Description must be at least 20 characters');
-    }
-    
-    const validCategories = ['concert', 'conference', 'workshop', 'sports', 'festival', 'exhibition'];
-    if (!category || !validCategories.includes(category)) {
-      errors.push('Invalid category selected');
-    }
-    
-    if (!date || isNaN(new Date(date).getTime())) {
-      errors.push('Valid date is required');
-    }
-    
-    if (!capacity || capacity < 1) {
-      errors.push('Capacity must be at least 1');
-    }
-    
-    if (!price || price < 0) {
-      errors.push('Price must be a positive number');
-    }
-    
-    if (errors.length > 0) {
-      errors.forEach(error => req.flash('error', error));
-      return res.redirect('back');
-    }
-    
+    console.log('✅ Event validation passed');
     next();
   },
 
@@ -310,6 +241,57 @@ module.exports = {
       return res.redirect('back');
     }
     
+    next();
+  },
+  
+  // Fix for capacity validation in updates
+  validateEventUpdate: (req, res, next) => {
+    console.log('🔍 Event update validation started...');
+    console.log('📝 Update request body:', req.body);
+    
+    const errors = [];
+    const { title, description, category, date, capacity, price, time, venue, address, city } = req.body;
+    
+    // More lenient validation for updates - only validate if field is provided
+    if (title && title.trim().length < 5) {
+      errors.push('Title must be at least 5 characters');
+    }
+    
+    if (description && description.trim().length < 20) {
+      errors.push('Description must be at least 20 characters');
+    }
+    
+    if (category) {
+      const validCategories = ['concert', 'conference', 'workshop', 'sports', 'festival', 'exhibition'];
+      if (!validCategories.includes(category)) {
+        errors.push('Invalid category selected');
+      }
+    }
+    
+    if (date) {
+      if (isNaN(new Date(date).getTime())) {
+        errors.push('Valid date is required');
+      }
+    }
+    
+    if (capacity && capacity < 1) {
+      errors.push('Capacity must be at least 1');
+    }
+    
+    if (price !== undefined) {
+      const priceNum = parseFloat(price);
+      if (isNaN(priceNum) || priceNum < 0) {
+        errors.push('Price must be a positive number');
+      }
+    }
+    
+    if (errors.length > 0) {
+      console.log('❌ Event update validation errors:', errors);
+      errors.forEach(error => req.flash('error', error));
+      return res.redirect('back');
+    }
+    
+    console.log('✅ Event update validation passed');
     next();
   }
 };
