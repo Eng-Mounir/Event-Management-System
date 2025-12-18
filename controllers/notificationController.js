@@ -26,57 +26,126 @@ class NotificationObserver {
 
 class EmailNotificationService {
   constructor() {
-    // 1. Configure the transporter with YOUR Brevo SMTP credentials
     this.transporter = nodemailer.createTransport({
       host: 'smtp-relay.brevo.com',
-      port: 587, // Use 587 or 2525
-      secure: false, // true for 465, false for other ports
+      port: 587,
+      secure: false,
       auth: {
-        user: '9e4c8b001@smtp-brevo.com', // e.g., your-email@example.com
-        pass: 'AGm713YL6XsK8VxR' // The specific SMTP key you generated
+        user: '9e4c8b001@smtp-brevo.com',
+        pass: 'AGm713YL6XsK8VxR'
       }
     });
   }
 
   async update(eventType, data) {
-    // Get user email (you need to fetch the user in your real code)
-    // For now, let's assume 'data' contains the user's email for a confirmation
-    const userEmail = data.userEmail; // You need to pass this in your notify() call
-
-    if (!userEmail) {
-      console.error('No email found for user in data:', data);
-      return;
-    }
-
-    // 2. Determine email content based on the event
-    let mailOptions = {};
-    switch (eventType) {
-      case 'REGISTRATION_CONFIRMED':
-        mailOptions = {
-          from: '"EventHub" <noreply@yourdomain.com>', // Use your verified sender
-          to: userEmail,
-          subject: `Registration Confirmed: ${data.eventTitle}`,
-          text: `Your registration for "${data.eventTitle}" has been confirmed.`,
-          html: `<p>Your registration for <strong>${data.eventTitle}</strong> has been confirmed.</p>`
-        };
-        break;
-      case 'EVENT_REMINDER':
-        mailOptions = {
-          from: '"EventHub" <noreply@yourdomain.com>',
-          to: userEmail,
-          subject: `Reminder: ${data.eventTitle} is Tomorrow!`,
-          text: `Don't forget about "${data.eventTitle}" tomorrow!`,
-          html: `<p>Reminder: <strong>${data.eventTitle}</strong> is happening tomorrow!</p>`
-        };
-        break;
-      // Add more cases for EVENT_UPDATED, etc.
-    }
-
-    // 3. Send the email
     try {
-      let info = await this.transporter.sendMail(mailOptions);
+      // Get user email from data or fetch from database
+      let userEmail = data.userEmail;
+      
+      // If email not in data, fetch it
+      if (!userEmail && data.userId) {
+        const user = await User.findByPk(data.userId);
+        if (user) {
+          userEmail = user.email;
+        }
+      }
+      
+      if (!userEmail) {
+        console.error('No email found for notification:', eventType, data);
+        return;
+      }
+
+      let mailOptions = {};
+      const eventTitle = data.eventTitle || data.title || 'Event';
+      
+      switch (eventType) {
+        case 'REGISTRATION_CONFIRMED':
+          mailOptions = {
+            from: '"EventHub" <noreply@eventhub.com>',
+            to: userEmail,
+            subject: `🎫 Ticket Confirmed: ${eventTitle}`,
+            text: `Your registration for "${eventTitle}" has been confirmed.\n\nEvent Details:\n- Date: ${data.eventDate || 'N/A'}\n- Time: ${data.eventTime || 'N/A'}\n- Venue: ${data.eventVenue || 'N/A'}\n- Tickets: ${data.ticketQuantity || 1}\n- Total: $${data.totalAmount || 0}\n\nThank you for your purchase!`,
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #4361ee;">🎫 Ticket Confirmed!</h2>
+                <p>Your registration for <strong>${eventTitle}</strong> has been confirmed.</p>
+                
+                <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                  <h3 style="color: #3a0ca3;">Event Details</h3>
+                  <p><strong>Date:</strong> ${data.eventDate || 'N/A'}</p>
+                  <p><strong>Time:</strong> ${data.eventTime || 'N/A'}</p>
+                  <p><strong>Venue:</strong> ${data.eventVenue || 'N/A'}</p>
+                  <p><strong>Tickets:</strong> ${data.ticketQuantity || 1}</p>
+                  <p><strong>Total:</strong> $${data.totalAmount || 0}</p>
+                </div>
+                
+                <p>You can view your ticket at: <a href="http://localhost:3000/users/registrations/${data.registrationId}">View Ticket</a></p>
+                
+                <p style="color: #666; font-size: 0.9em;">Thank you for choosing EventHub!</p>
+              </div>
+            `
+          };
+          break;
+          
+        case 'PAYMENT_SUCCESS':
+          mailOptions = {
+            from: '"EventHub" <noreply@eventhub.com>',
+            to: userEmail,
+            subject: `✅ Payment Successful: ${eventTitle}`,
+            text: `Your payment of $${data.amount} for "${eventTitle}" has been processed successfully.\n\nTransaction ID: ${data.transactionId}\nDate: ${new Date().toLocaleDateString()}\n\nThank you for your purchase!`,
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #2ecc71;">✅ Payment Successful!</h2>
+                <p>Your payment has been processed successfully.</p>
+                
+                <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                  <h3 style="color: #27ae60;">Payment Details</h3>
+                  <p><strong>Event:</strong> ${eventTitle}</p>
+                  <p><strong>Amount:</strong> $${data.amount}</p>
+                  <p><strong>Transaction ID:</strong> ${data.transactionId}</p>
+                  <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
+                </div>
+                
+                <p>You can view your ticket at: <a href="http://localhost:3000/users/tickets">My Tickets</a></p>
+                
+                <p style="color: #666; font-size: 0.9em;">Thank you for your purchase!</p>
+              </div>
+            `
+          };
+          break;
+          
+        case 'EVENT_REMINDER':
+          mailOptions = {
+            from: '"EventHub" <noreply@eventhub.com>',
+            to: userEmail,
+            subject: `🔔 Reminder: ${eventTitle} is Tomorrow!`,
+            text: `Don't forget about "${eventTitle}" tomorrow!\n\nDate: ${data.eventDate}\nTime: ${data.eventTime}\nVenue: ${data.eventVenue}\n\nSee you there!`,
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #f39c12;">🔔 Event Reminder</h2>
+                <p>Don't forget about <strong>${eventTitle}</strong> tomorrow!</p>
+                
+                <div style="background: #fff3cd; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                  <h3 style="color: #856404;">Event Details</h3>
+                  <p><strong>Date:</strong> ${data.eventDate}</p>
+                  <p><strong>Time:</strong> ${data.eventTime}</p>
+                  <p><strong>Venue:</strong> ${data.eventVenue}</p>
+                </div>
+                
+                <p>See you there!</p>
+              </div>
+            `
+          };
+          break;
+          
+        default:
+          console.log(`No email template for event type: ${eventType}`);
+          return;
+      }
+
+      const info = await this.transporter.sendMail(mailOptions);
       console.log(`[Email Sent] ${eventType} to ${userEmail}:`, info.messageId);
-      // You can log this info to Brevo's dashboard later
+      
     } catch (error) {
       console.error(`[Email Error] ${eventType}:`, error);
     }

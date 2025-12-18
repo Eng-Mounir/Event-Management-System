@@ -3,7 +3,7 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 
 // Import models
-const { Event, Registration, Wishlist, Review, User } = require('../models/associations');
+const { Event, Registration, Wishlist, Review, User, Notification } = require('../models/associations');
 const { Op } = require('sequelize');
 
 // Dashboard route
@@ -12,7 +12,33 @@ router.get('/dashboard', auth.isAuthenticated, async (req, res) => {
     // Get user's real data
     const userId = req.session.user.userId;
     
-    // 1. Count events attended (past registrations) - FIXED with 'as'
+    // 1. Get recent tickets from confirmed payments (last 5)
+    const recentTickets = await Registration.findAll({
+      where: { 
+        userId: userId,
+        status: 'confirmed',
+        paymentStatus: 'completed'
+      },
+      include: [{
+        model: Event,
+        as: 'event',
+        attributes: ['eventId', 'title', 'date', 'time', 'venue', 'city', 'imageUrl', 'category']
+      }],
+      order: [['bookingDate', 'DESC']],
+      limit: 5
+    });
+    
+    // 2. Calculate total spent on tickets
+    const totalSpentResult = await Registration.sum('totalAmount', {
+      where: { 
+        userId: userId, 
+        status: 'confirmed',
+        paymentStatus: 'completed'
+      }
+    });
+    const totalSpent = totalSpentResult || 0;
+    
+    // 3. Count events attended (past registrations)
     const eventsAttended = await Registration.count({
       include: [{
         model: Event,
@@ -21,10 +47,14 @@ router.get('/dashboard', auth.isAuthenticated, async (req, res) => {
           date: { [Op.lt]: new Date() }
         }
       }],
-      where: { userId }
+      where: { 
+        userId,
+        status: 'confirmed',
+        paymentStatus: 'completed'
+      }
     });
     
-    // 2. Count upcoming registrations - FIXED with 'as'
+    // 4. Count upcoming registrations
     const upcomingEvents = await Registration.count({
       include: [{
         model: Event,
@@ -33,22 +63,47 @@ router.get('/dashboard', auth.isAuthenticated, async (req, res) => {
           date: { [Op.gte]: new Date() }
         }
       }],
-      where: { userId }
+      where: { 
+        userId,
+        status: 'confirmed',
+        paymentStatus: 'completed'
+      }
     });
     
-    // 3. Count wishlisted events
+    // 5. Count wishlisted events
     const wishlistedEvents = await Wishlist.count({
       where: { userId }
     });
     
-    // 4. Count reviews given
+    // 6. Count reviews given
     const reviewsGiven = await Review.count({
       where: { userId }
     });
     
-    // 5. Get upcoming event registrations with details - FIXED with 'as'
+    // 7. Count total registrations
+    const totalRegistrations = await Registration.count({
+      where: { 
+        userId,
+        status: 'confirmed',
+        paymentStatus: 'completed'
+      }
+    });
+    
+    // 8. Get unread notification count
+    const unreadNotificationCount = await Notification.count({
+      where: { 
+        userId: userId, 
+        isRead: false 
+      }
+    });
+    
+    // 9. Get upcoming event registrations with details
     const upcomingRegistrations = await Registration.findAll({
-      where: { userId },
+      where: { 
+        userId,
+        status: 'confirmed',
+        paymentStatus: 'completed'
+      },
       include: [{
         model: Event,
         as: 'event',
@@ -65,9 +120,13 @@ router.get('/dashboard', auth.isAuthenticated, async (req, res) => {
       limit: 5
     });
     
-    // 6. Get past event registrations - FIXED with 'as'
+    // 10. Get past event registrations
     const pastRegistrations = await Registration.findAll({
-      where: { userId },
+      where: { 
+        userId,
+        status: 'confirmed',
+        paymentStatus: 'completed'
+      },
       include: [{
         model: Event,
         as: 'event',
@@ -79,7 +138,7 @@ router.get('/dashboard', auth.isAuthenticated, async (req, res) => {
       limit: 5
     });
     
-    // 7. Get organizer's own events (if organizer)
+    // 11. Get organizer's own events (if organizer)
     let myEvents = [];
     if (req.session.user.role === 'organizer') {
       myEvents = await Event.findAll({
@@ -91,18 +150,22 @@ router.get('/dashboard', auth.isAuthenticated, async (req, res) => {
       });
     }
     
-    // 8. Get recent activity (combine registrations, wishlists, reviews)
+    // 12. Get recent activity
     const recentActivity = [];
     
-    // Add recent registrations to activity - FIXED with correct column name
+    // Add recent registrations to activity
     const recentRegistrations = await Registration.findAll({
-      where: { userId },
+      where: { 
+        userId,
+        status: 'confirmed',
+        paymentStatus: 'completed'
+      },
       include: [{
         model: Event,
         as: 'event',
         attributes: ['title', 'eventId']
       }],
-      order: [['bookingDate', 'DESC']],  // CHANGED: registrationDate → bookingDate
+      order: [['bookingDate', 'DESC']],
       limit: 3
     });
     
@@ -110,15 +173,15 @@ router.get('/dashboard', auth.isAuthenticated, async (req, res) => {
       if (reg.event) {
         recentActivity.push({
           type: 'registration',
-          message: `Registered for ${reg.event.title}`,
-          date: reg.bookingDate,  // CHANGED: registrationDate → bookingDate
-          icon: 'check-circle-fill',
+          message: `Purchased ticket for ${reg.event.title}`,
+          date: reg.bookingDate,
+          icon: 'ticket-perforated',
           color: 'success'
         });
       }
     });
     
-    // Add recent wishlists to activity - FIXED with correct column name
+    // Add recent wishlists to activity
     const recentWishlists = await Wishlist.findAll({
       where: { userId },
       include: [{
@@ -126,7 +189,7 @@ router.get('/dashboard', auth.isAuthenticated, async (req, res) => {
         as: 'event',
         attributes: ['title', 'eventId']
       }],
-      order: [['addedDate', 'DESC']],  // This is correct based on your model
+      order: [['addedDate', 'DESC']],
       limit: 3
     });
     
@@ -135,14 +198,14 @@ router.get('/dashboard', auth.isAuthenticated, async (req, res) => {
         recentActivity.push({
           type: 'wishlist',
           message: `Added ${wish.event.title} to Wishlist`,
-          date: wish.addedDate,  // This is correct based on your model
-          icon: 'heart-fill',
-          color: 'warning'
+          date: wish.addedDate,
+          icon: 'heart',
+          color: 'danger'
         });
       }
     });
     
-    // Add recent reviews to activity - FIXED with correct column name
+    // Add recent reviews to activity
     const recentReviews = await Review.findAll({
       where: { userId },
       include: [{
@@ -150,7 +213,7 @@ router.get('/dashboard', auth.isAuthenticated, async (req, res) => {
         as: 'event',
         attributes: ['title', 'eventId']
       }],
-      order: [['reviewDate', 'DESC']],  // CHANGED: createdAt → reviewDate (or use createdAt if you prefer)
+      order: [['reviewDate', 'DESC']],
       limit: 3
     });
     
@@ -159,9 +222,9 @@ router.get('/dashboard', auth.isAuthenticated, async (req, res) => {
         recentActivity.push({
           type: 'review',
           message: `Reviewed ${review.event.title}`,
-          date: review.reviewDate,  // CHANGED: createdAt → reviewDate
-          icon: 'star-fill',
-          color: 'primary'
+          date: review.reviewDate,
+          icon: 'star',
+          color: 'warning'
         });
       }
     });
@@ -169,15 +232,20 @@ router.get('/dashboard', auth.isAuthenticated, async (req, res) => {
     // Sort activity by date (most recent first)
     recentActivity.sort((a, b) => new Date(b.date) - new Date(a.date));
     
+    // Render dashboard with all data
     res.render('dashboard', {
-      title: 'Dashboard',
+      title: 'Dashboard - EventHub',
       active: 'dashboard',
       user: req.session.user,
+      recentTickets: recentTickets || [],
+      totalSpent: totalSpent,
       stats: {
         eventsAttended: eventsAttended || 0,
         upcomingEvents: upcomingEvents || 0,
         wishlistedEvents: wishlistedEvents || 0,
-        reviewsGiven: reviewsGiven || 0
+        reviewsGiven: reviewsGiven || 0,
+        totalRegistrations: totalRegistrations || 0,
+        unreadNotifications: unreadNotificationCount || 0
       },
       upcomingRegistrations: upcomingRegistrations || [],
       pastRegistrations: pastRegistrations || [],
@@ -191,7 +259,8 @@ router.get('/dashboard', auth.isAuthenticated, async (req, res) => {
     res.redirect('/');
   }
 });
-// Add this route before module.exports in dashboardRoutes.js
+
+// Dashboard stats API (optional)
 router.get('/dashboard/stats', auth.isAuthenticated, async (req, res) => {
   try {
     const userId = req.session.user.userId;
@@ -204,7 +273,11 @@ router.get('/dashboard/stats', auth.isAuthenticated, async (req, res) => {
           date: { [Op.lt]: new Date() }
         }
       }],
-      where: { userId }
+      where: { 
+        userId,
+        status: 'confirmed',
+        paymentStatus: 'completed'
+      }
     });
     
     const upcomingEvents = await Registration.count({
@@ -215,7 +288,11 @@ router.get('/dashboard/stats', auth.isAuthenticated, async (req, res) => {
           date: { [Op.gte]: new Date() }
         }
       }],
-      where: { userId }
+      where: { 
+        userId,
+        status: 'confirmed',
+        paymentStatus: 'completed'
+      }
     });
     
     const wishlistedEvents = await Wishlist.count({
@@ -238,4 +315,5 @@ router.get('/dashboard/stats', auth.isAuthenticated, async (req, res) => {
     res.status(500).json({ error: 'Unable to fetch stats' });
   }
 });
+
 module.exports = router;

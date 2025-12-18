@@ -172,6 +172,7 @@ const reviewRoutes = require('./routes/reviewRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
+const ticketRoutes = require('./routes/ticketRoutes');
 // Import notification manager
 const { NotificationManager } = require('./controllers/notificationController');
 
@@ -237,6 +238,7 @@ app.use('/', registrationRoutes);
 app.use('/', wishlistRoutes);
 app.use('/', reviewRoutes);
 app.use('/', notificationRoutes);
+app.use('/', ticketRoutes);
 app.use('/payments', paymentRoutes);
 
 // Home route

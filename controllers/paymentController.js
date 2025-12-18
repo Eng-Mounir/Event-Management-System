@@ -5,11 +5,13 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 // Helper function moved to TOP LEVEL - can be called anywhere
 async function handleSuccessfulPayment(paymentIntent, req, res, event, quantity, amount) {
   try {
+    const userId = req.session.user.userId;
+    
     // Check if registration already exists
     const existingRegistration = await Registration.findOne({
       where: {
         eventId: event.eventId,
-        userId: req.session.user.userId,
+        userId: userId,
         status: { [Op.notIn]: ['cancelled', 'refunded'] }
       }
     });
@@ -24,7 +26,7 @@ async function handleSuccessfulPayment(paymentIntent, req, res, event, quantity,
     // Create registration record
     const registration = await Registration.create({
       eventId: event.eventId,
-      userId: req.session.user.userId,
+      userId: userId,
       ticketQuantity: quantity,
       totalAmount: parseFloat(amount),
       paymentMethod: 'credit_card',
@@ -46,13 +48,48 @@ async function handleSuccessfulPayment(paymentIntent, req, res, event, quantity,
     // Update available seats
     await event.decrement('availableSeats', { by: quantity });
     
+    // ✅ SEND NOTIFICATIONS HERE!
+    try {
+      const notificationManager = require('./notificationController').NotificationManager.getInstance();
+      const user = await User.findByPk(userId);
+      
+      // Send registration confirmation notification
+      await notificationManager.notify('REGISTRATION_CONFIRMED', {
+        userId: userId,
+        userEmail: user.email,
+        eventTitle: event.title,
+        eventDate: event.date.toLocaleDateString(),
+        eventTime: event.time,
+        eventVenue: event.venue,
+        ticketQuantity: quantity,
+        totalAmount: amount,
+        registrationId: registration.registrationId
+      });
+      
+      // Send payment success notification
+      await notificationManager.notify('PAYMENT_SUCCESS', {
+        userId: userId,
+        userEmail: user.email,
+        eventTitle: event.title,
+        amount: amount,
+        transactionId: paymentIntent.id,
+        registrationId: registration.registrationId
+      });
+      
+      console.log('✅ Payment notifications sent successfully');
+      
+    } catch (notifError) {
+      console.error('❌ Notification error:', notifError);
+      // Don't fail the payment if notification fails
+    }
+    
     // Return success response
     return {
       success: true,
       requiresAction: false,
       registrationId: registration.registrationId,
       redirectUrl: `/payments/success?registrationId=${registration.registrationId}`,
-      message: 'Payment successful!'
+      message: 'Payment successful! Check your email for confirmation.'
     };
     
   } catch (error) {
@@ -246,71 +283,105 @@ module.exports = {
     }
   },
   
-  // Confirm 3D Secure payment
-  confirmPayment: async (req, res) => {
-    try {
-      const { paymentIntentId } = req.body;
+// Confirm 3D Secure payment
+confirmPayment: async (req, res) => {
+  try {
+    const { paymentIntentId } = req.body;
+    
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    
+    if (paymentIntent.status === 'succeeded') {
+      // Get metadata from payment intent
+      const { eventId, userId, quantity, userEmail, userName } = paymentIntent.metadata;
+      const event = await Event.findByPk(eventId);
+      const amount = (paymentIntent.amount / 100).toFixed(2);
       
-      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-      
-      if (paymentIntent.status === 'succeeded') {
-        // Get metadata from payment intent
-        const { eventId, userId, quantity } = paymentIntent.metadata;
-        const event = await Event.findByPk(eventId);
-        const amount = (paymentIntent.amount / 100).toFixed(2);
-        
-        // Check if registration already exists
-        const existingRegistration = await Registration.findOne({
-          where: {
-            eventId: eventId,
-            userId: userId,
-            status: { [Op.notIn]: ['cancelled', 'refunded'] }
-          }
-        });
-        
-        if (existingRegistration) {
-          return res.status(400).json({
-            success: false,
-            message: 'You are already registered for this event'
-          });
+      // Check if registration already exists
+      const existingRegistration = await Registration.findOne({
+        where: {
+          eventId: eventId,
+          userId: userId,
+          status: { [Op.notIn]: ['cancelled', 'refunded'] }
         }
-        
-        // Create registration
-        const registration = await Registration.create({
-          eventId,
-          userId,
-          ticketQuantity: parseInt(quantity),
-          totalAmount: amount,
-          paymentMethod: 'credit_card',
-          paymentId: paymentIntent.id,
-          status: 'confirmed',
-          paymentStatus: 'completed',
-          bookingDate: new Date()
-        });
-        
-        // Update available seats
-        await event.decrement('availableSeats', { by: parseInt(quantity) });
-        
-        res.json({
-          success: true,
-          registrationId: registration.registrationId,
-          redirectUrl: `/payments/success?registrationId=${registration.registrationId}`
-        });
-      } else {
-        res.status(400).json({
+      });
+      
+      if (existingRegistration) {
+        return res.status(400).json({
           success: false,
-          message: `Payment not completed. Status: ${paymentIntent.status}`
+          message: 'You are already registered for this event'
         });
       }
       
-    } catch (error) {
-      console.error('Payment confirmation error:', error);
-      res.status(500).json({
+      // Create registration
+      const registration = await Registration.create({
+        eventId,
+        userId,
+        ticketQuantity: parseInt(quantity),
+        totalAmount: amount,
+        paymentMethod: 'credit_card',
+        paymentId: paymentIntent.id,
+        status: 'confirmed',
+        paymentStatus: 'completed',
+        bookingDate: new Date()
+      });
+      
+      // Update available seats
+      await event.decrement('availableSeats', { by: parseInt(quantity) });
+      
+      // ✅ SEND NOTIFICATIONS HERE!
+      try {
+        const notificationManager = require('./notificationController').NotificationManager.getInstance();
+        const user = await User.findByPk(userId);
+        
+        // Send registration confirmation notification
+        await notificationManager.notify('REGISTRATION_CONFIRMED', {
+          userId: userId,
+          userEmail: userEmail || user.email,
+          eventTitle: event.title,
+          eventDate: event.date.toLocaleDateString(),
+          eventTime: event.time,
+          eventVenue: event.venue,
+          ticketQuantity: quantity,
+          totalAmount: amount,
+          registrationId: registration.registrationId
+        });
+        
+        // Send payment success notification
+        await notificationManager.notify('PAYMENT_SUCCESS', {
+          userId: userId,
+          userEmail: userEmail || user.email,
+          eventTitle: event.title,
+          amount: amount,
+          transactionId: paymentIntent.id,
+          registrationId: registration.registrationId
+        });
+        
+        console.log('✅ 3D Secure payment notifications sent');
+        
+      } catch (notifError) {
+        console.error('❌ Notification error:', notifError);
+      }
+      
+      res.json({
+        success: true,
+        registrationId: registration.registrationId,
+        redirectUrl: `/payments/success?registrationId=${registration.registrationId}`
+      });
+    } else {
+      res.status(400).json({
         success: false,
-        message: 'Payment confirmation failed'
+        message: `Payment not completed. Status: ${paymentIntent.status}`
       });
     }
-  },
+    
+  } catch (error) {
+    console.error('Payment confirmation error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Payment confirmation failed'
+    });
+  }
+},
   
   // Check payment status (for processing payments)
   checkPaymentStatus: async (req, res) => {

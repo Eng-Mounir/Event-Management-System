@@ -14,9 +14,6 @@
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     
-    <!-- Custom CSS -->
-    <link href="/css/style.css" rel="stylesheet">
-    
     <style>
         :root {
             --primary: #4361ee;
@@ -51,6 +48,11 @@
             border: none;
             border-radius: 15px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+            transition: transform 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
         }
         
         .btn-primary {
@@ -58,6 +60,10 @@
             border: none;
             padding: 12px 30px;
             border-radius: 50px;
+        }
+        
+        .btn-primary:hover {
+            opacity: 0.9;
         }
         
         .footer {
@@ -150,6 +156,44 @@
             align-items: center;
             justify-content: center;
         }
+        
+        /* Recent Tickets Styles */
+        .recent-ticket-item {
+            border-left: 4px solid #4361ee;
+            background: #f8f9fa;
+            transition: all 0.3s ease;
+        }
+        
+        .recent-ticket-item:hover {
+            background: #e9ecef;
+            border-left-color: #3a0ca3;
+        }
+        
+        .payment-status-badge {
+            font-size: 0.65rem;
+            padding: 0.2rem 0.5rem;
+        }
+        
+        .amount-badge {
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        
+        /* Ticket table responsive */
+        @media (max-width: 768px) {
+            .table-responsive {
+                font-size: 0.85rem;
+            }
+            
+            .amount-badge {
+                font-size: 0.8rem;
+            }
+            
+            .event-icon {
+                width: 36px;
+                height: 36px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -183,7 +227,7 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="/users/registrations">
+                            <a class="nav-link" href="/users/tickets">
                                 <i class="bi bi-ticket-perforated"></i> My Tickets
                             </a>
                         </li>
@@ -196,9 +240,11 @@
                         <li class="nav-item me-3 position-relative list-unstyled">
                             <a class="nav-link position-relative" href="/notifications">
                                 <i class="bi bi-bell fs-5"></i>
-                                <span id="notificationBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger notification-badge" style="display: none;">
-                                    0
-                                </span>
+                                <% if (stats.unreadNotifications && stats.unreadNotifications > 0) { %>
+                                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger notification-badge">
+                                        <%= stats.unreadNotifications %>
+                                    </span>
+                                <% } %>
                             </a>
                         </li>
                     <% } %>
@@ -222,9 +268,11 @@
                                 </a></li>
                                 <li><a class="dropdown-item" href="/notifications">
                                     <i class="bi bi-bell me-2"></i>Notifications
-                                    <span id="dropdownNotificationBadge" class="badge bg-danger float-end mt-1" style="display: none;">
-                                        0
-                                    </span>
+                                    <% if (stats.unreadNotifications && stats.unreadNotifications > 0) { %>
+                                        <span class="badge bg-danger float-end mt-1">
+                                            <%= stats.unreadNotifications %>
+                                        </span>
+                                    <% } %>
                                 </a></li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="/auth/logout">
@@ -272,7 +320,7 @@
             <!-- Dashboard Header -->
             <div class="row mb-5">
                 <div class="col">
-                    <div class="card border-0 shadow-sm bg-gradient text-white" style="background: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%);">
+                    <div class="card border-0 shadow-sm bg-gradient text-dark" style="background: linear-gradient(135deg, #254aec 0%, #3a0ca3 100%);">
                         <div class="card-body p-4">
                             <div class="row align-items-center">
                                 <div class="col-md-8">
@@ -283,6 +331,14 @@
                                     <p class="mb-0 opacity-75">
                                         Manage your events, registrations, and wishlist from one place.
                                     </p>
+                                    <% if (totalSpent && totalSpent > 0) { %>
+                                        <div class="mt-3">
+                                            <span class="badge bg-white text-dark p-2">
+                                                <i class="bi bi-wallet2 me-1"></i>
+                                                Total Spent: $<%= totalSpent.toFixed(2) %>
+                                            </span>
+                                        </div>
+                                    <% } %>
                                 </div>
                                 <div class="col-md-4 text-end">
                                     <% if (user.role === 'organizer') { %>
@@ -364,7 +420,140 @@
                 </div>
             </div>
 
-            <!-- Tabs -->
+            <!-- Recent Tickets Section -->
+            <div class="row mb-5">
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-white border-0 py-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h5 class="fw-bold mb-0">
+                                    <i class="bi bi-ticket-perforated text-success me-2"></i>
+                                    Recent Tickets (Confirmed Payments)
+                                </h5>
+                                <% if (recentTickets && recentTickets.length > 0) { %>
+                                    <a href="/users/tickets" class="btn btn-sm btn-primary">
+                                        <i class="bi bi-arrow-right me-1"></i>View All
+                                    </a>
+                                <% } %>
+                            </div>
+                        </div>
+                        
+                        <div class="card-body p-4">
+                            <% if (recentTickets && recentTickets.length > 0) { %>
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Event</th>
+                                                <th>Date</th>
+                                                <th>Tickets</th>
+                                                <th>Amount</th>
+                                                <th>Status</th>
+                                                <th>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <% recentTickets.forEach(ticket => { 
+                                                const event = ticket.event;
+                                                if (!event) return;
+                                                const eventDate = new Date(event.date);
+                                            %>
+                                                <tr class="recent-ticket-item">
+                                                    <td>
+                                                        <div class="d-flex align-items-center">
+                                                            <% if (event.imageUrl && event.imageUrl !== '/images/default-event.jpg') { %>
+                                                                <img src="<%= event.imageUrl %>" 
+                                                                     alt="<%= event.title %>"
+                                                                     class="rounded me-3"
+                                                                     style="width: 50px; height: 50px; object-fit: cover;">
+                                                            <% } else { %>
+                                                                <div class="rounded bg-primary bg-opacity-10 d-flex align-items-center justify-content-center me-3"
+                                                                     style="width: 50px; height: 50px;">
+                                                                    <i class="bi bi-calendar-event text-primary"></i>
+                                                                </div>
+                                                            <% } %>
+                                                            <div>
+                                                                <h6 class="fw-bold mb-0"><%= event.title %></h6>
+                                                                <small class="text-muted d-block">
+                                                                    <i class="bi bi-geo-alt me-1"></i><%= event.city || 'N/A' %>
+                                                                </small>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <div class="fw-semibold">
+                                                            <%= eventDate.toLocaleDateString('en-US', { 
+                                                                month: 'short', 
+                                                                day: 'numeric' 
+                                                            }) %>
+                                                        </div>
+                                                        <small class="text-muted">
+                                                            <%= event.time || 'N/A' %>
+                                                        </small>
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-primary bg-opacity-10 text-primary">
+                                                            <i class="bi bi-ticket-perforated me-1"></i>
+                                                            <%= ticket.ticketQuantity %>
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-success bg-opacity-10 text-success amount-badge">
+                                                            $<%= parseFloat(ticket.totalAmount || 0).toFixed(2) %>
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-success payment-status-badge">
+                                                            <i class="bi bi-check-circle me-1"></i>
+                                                            <%= ticket.paymentStatus || 'completed' %>
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <a href="/users/registrations/<%= ticket.registrationId %>" 
+                                                           class="btn btn-sm btn-outline-primary">
+                                                            <i class="bi bi-eye me-1"></i>View
+                                                        </a>
+                                                    </td>
+                                                </tr>
+                                            <% }) %>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <% if (totalSpent && totalSpent > 0) { %>
+                                    <div class="mt-4 pt-3 border-top">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <span class="text-muted">Total spent on tickets:</span>
+                                            <span class="fw-bold text-success fs-5">$<%= totalSpent.toFixed(2) %></span>
+                                        </div>
+                                    </div>
+                                <% } %>
+                                
+                                <div class="text-center mt-4">
+                                    <a href="/users/tickets" class="btn btn-primary">
+                                        <i class="bi bi-ticket-perforated me-2"></i>View All Tickets
+                                    </a>
+                                </div>
+                            <% } else { %>
+                                <div class="text-center py-5">
+                                    <div class="mb-4">
+                                        <i class="bi bi-ticket-perforated text-muted" style="font-size: 4rem;"></i>
+                                    </div>
+                                    <h5 class="fw-bold mb-3">No recent tickets</h5>
+                                    <p class="text-muted mb-4">
+                                        You haven't purchased any event tickets yet. Browse events and make your first booking!
+                                    </p>
+                                    <a href="/events" class="btn btn-primary btn-lg">
+                                        <i class="bi bi-search me-2"></i>Browse Events
+                                    </a>
+                                </div>
+                            <% } %>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabs Section -->
             <div class="row">
                 <div class="col-lg-8">
                     <div class="card border-0 shadow-sm mb-4">
@@ -430,10 +619,14 @@
                                                                     <%= event.venue %>
                                                                 <% } %>
                                                             </p>
-                                                            <div class="badge bg-success bg-opacity-10 text-success">Confirmed</div>
+                                                            <div class="badge bg-success bg-opacity-10 text-success">
+                                                                <i class="bi bi-check-circle me-1"></i>Confirmed
+                                                            </div>
                                                         </div>
                                                         <div class="col-auto">
-                                                            <a href="/users/registrations/<%= reg.registrationId %>" class="btn btn-outline-primary btn-sm">View Ticket</a>
+                                                            <a href="/users/registrations/<%= reg.registrationId %>" class="btn btn-outline-primary btn-sm">
+                                                                <i class="bi bi-ticket-perforated me-1"></i>View Ticket
+                                                            </a>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -447,14 +640,6 @@
                                             <h5 class="fw-bold">No upcoming registrations</h5>
                                             <p class="text-muted mb-3">You haven't registered for any upcoming events yet.</p>
                                             <a href="/events" class="btn btn-primary">Browse Events</a>
-                                        </div>
-                                    <% } %>
-                                    
-                                    <% if (upcomingRegistrations && upcomingRegistrations.length > 0) { %>
-                                        <div class="text-center mt-4">
-                                            <a href="/users/registrations" class="btn btn-primary">
-                                                <i class="bi bi-ticket-perforated me-2"></i>View All Tickets
-                                            </a>
                                         </div>
                                     <% } %>
                                 </div>
@@ -539,7 +724,9 @@
                                                                 </p>
                                                             </div>
                                                             <div class="col-auto">
-                                                                <a href="/events/<%= event.eventId %>/manage" class="btn btn-outline-info btn-sm">Manage</a>
+                                                                <a href="/events/<%= event.eventId %>/manage" class="btn btn-outline-info btn-sm">
+                                                                    <i class="bi bi-gear me-1"></i>Manage
+                                                                </a>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -588,7 +775,7 @@
                                     </div>
                                 </a>
                                 
-                                <a href="/users/registrations" class="btn btn-outline-success text-start py-3">
+                                <a href="/users/tickets" class="btn btn-outline-success text-start py-3">
                                     <i class="bi bi-ticket-perforated me-3 fs-5"></i>
                                     <div>
                                         <h6 class="fw-bold mb-1">My Tickets</h6>
@@ -629,11 +816,11 @@
                                 <div class="timeline">
                                     <% recentActivity.forEach(activity => { %>
                                         <div class="timeline-item">
-                                            <div class="timeline-icon bg-<%= activity.color %>">
-                                                <i class="bi bi-<%= activity.icon %>"></i>
+                                            <div class="timeline-icon bg-<%= activity.color || 'primary' %>">
+                                                <i class="bi bi-<%= activity.icon || 'activity' %>"></i>
                                             </div>
                                             <div class="timeline-content">
-                                                <h6 class="fw-bold"><%= activity.message %></h6>
+                                                <h6 class="fw-bold"><%= activity.message || 'Activity' %></h6>
                                                 <p class="text-muted small mb-0">
                                                     <% if (activity.date) { 
                                                         const now = new Date();
@@ -692,8 +879,6 @@
 
     <!-- Bootstrap JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Custom JS -->
-    <script src="/js/main.js"></script>
     
     <script>
         // Initialize Bootstrap tabs
@@ -706,49 +891,14 @@
                     event.preventDefault()
                     tabTrigger.show()
                 })
-            })
-            
-            // Fetch notification count
-            updateNotificationBadge();
-            
-            // Set up auto-refresh for notification badge (every 30 seconds)
-            setInterval(updateNotificationBadge, 30000);
-            
-            // Also update when user interacts with page (optional)
-            document.addEventListener('visibilitychange', function() {
-                if (!document.hidden) {
-                    updateNotificationBadge();
-                }
             });
+            
+            // Auto-refresh dashboard data every 60 seconds
+            setInterval(function() {
+                // Simple refresh without notification
+                console.log('Dashboard data auto-refresh at:', new Date().toLocaleTimeString());
+            }, 60000);
         });
-        
-        // Fetch notification count from API
-        async function updateNotificationBadge() {
-            try {
-                const response = await fetch('/api/notifications/count');
-                if (response.ok) {
-                    const data = await response.json();
-                    const badge = document.getElementById('notificationBadge');
-                    const dropdownBadge = document.getElementById('dropdownNotificationBadge');
-                    
-                    if (badge && data.count > 0) {
-                        badge.textContent = data.count;
-                        badge.style.display = 'flex';
-                    } else if (badge) {
-                        badge.style.display = 'none';
-                    }
-                    
-                    if (dropdownBadge && data.count > 0) {
-                        dropdownBadge.textContent = data.count;
-                        dropdownBadge.style.display = 'inline-block';
-                    } else if (dropdownBadge) {
-                        dropdownBadge.style.display = 'none';
-                    }
-                }
-            } catch (error) {
-                console.error('Failed to fetch notification count:', error);
-            }
-        }
     </script>
 </body>
 </html>
