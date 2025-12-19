@@ -345,7 +345,8 @@
     
     <!-- Stripe.js v3 -->
     <script src="https://js.stripe.com/v3/"></script>
-
+    <script src="https://www.paypal.com/sdk/js?client-id=<%= paypalClientId %>&currency=USD"></script>
+        </script>
     <script>
         // Debug: Check what variables are available
         console.log('Template variables:', {
@@ -418,7 +419,7 @@
             stripeForm.classList.add('d-none');
         });
         
-        // Handle Stripe form submission
+        // Handle Stripe form submission - UPDATED FOR STRATEGY PATTERN
         const form = document.getElementById('payment-form');
         form.addEventListener('submit', async (event) => {
             event.preventDefault();
@@ -451,30 +452,31 @@
                     return;
                 }
                 
-                console.log('Sending payment to server...', {
+                console.log('🎯 [FRONTEND] Sending payment via Strategy Pattern...', {
                     eventId: '<%= event.eventId %>',
                     quantity: <%= ticketQuantity %>,
                     amount: <%= totalAmountDisplay %>
                 });
                 
-                // Send paymentMethod.id to your server
-                const response = await fetch('/payments/stripe/process-payment-intent', {
+                // ✅ CHANGED: Using Strategy Pattern route instead of old route
+                const response = await fetch('/payments/process', {  // NEW STRATEGY PATTERN ROUTE
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
+                        provider: 'stripe',  // ✅ ADDED: Provider field for Strategy Pattern
+                        amount: <%= totalAmountDisplay %>,
                         eventId: '<%= event.eventId %>',
                         quantity: <%= ticketQuantity %>,
                         paymentMethodId: paymentMethod.id,
-                        amount: <%= totalAmountDisplay %>,
                         email: cardholderEmail,
                         name: cardholderName
                     })
                 });
                 
                 const data = await response.json();
-                console.log('Server response:', data);
+                console.log('🎯 [FRONTEND] Server response from Strategy Pattern:', data);
                 
                 if (data.success) {
                     if (data.requiresAction) {
@@ -488,12 +490,12 @@
                             resetButtonState();
                         } else if (paymentIntent.status === 'succeeded') {
                             // Payment succeeded with 3D Secure
-                            console.log('3D Secure payment succeeded, redirecting to:', data.redirectUrl);
+                            console.log('🎯 [FRONTEND] 3D Secure payment succeeded via Strategy Pattern, redirecting to:', data.redirectUrl);
                             window.location.href = data.redirectUrl || '/payments/success';
                         }
                     } else {
                         // Payment succeeded without 3D Secure
-                        console.log('Payment succeeded, redirecting to:', data.redirectUrl);
+                        console.log('🎯 [FRONTEND] Payment succeeded via Strategy Pattern, redirecting to:', data.redirectUrl);
                         window.location.href = data.redirectUrl || '/payments/success';
                     }
                 } else {
@@ -609,6 +611,113 @@
             console.log('Quantity:', <%= ticketQuantity %>);
             console.log('Total:', <%= totalAmountDisplay %>);
         });
+        
+// PayPal Integration - UPDATED FOR STRATEGY PATTERN
+let paypalButtonsInitialized = false;
+
+// Function to initialize PayPal buttons
+function initializePayPalButtons() {
+  if (paypalButtonsInitialized) return;
+  
+  paypal.Buttons({
+    style: {
+      layout: 'vertical',
+      color:  'blue',
+      shape:  'rect',
+      label:  'paypal'
+    },
+    
+    // Create Order - USING STRATEGY PATTERN
+    createOrder: function(data, actions) {
+      console.log('🎯 [FRONTEND] PayPal createOrder called - using Strategy Pattern');
+      return fetch('/payments/create-order', {  // ✅ CHANGED: Strategy Pattern route
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          provider: 'paypal',  // ✅ ADDED: Provider field for Strategy Pattern
+          eventId: '<%= event.eventId %>',
+          quantity: <%= ticketQuantity %>,
+          amount: <%= totalAmountDisplay %>
+        })
+      })
+      .then(function(res) {
+        return res.json();
+      })
+      .then(function(orderData) {
+        if (orderData.success) {
+          console.log('🎯 [FRONTEND] PayPal order created via Strategy Pattern:', orderData.id);
+          return orderData.id;
+        } else {
+          throw new Error(orderData.message || 'Failed to create order');
+        }
+      });
+    },
+    
+    // Approve Order - USING STRATEGY PATTERN
+    onApprove: function(data, actions) {
+      console.log('🎯 [FRONTEND] PayPal onApprove called - using Strategy Pattern');
+      return fetch('/payments/capture', {  // ✅ CHANGED: Strategy Pattern route
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          provider: 'paypal',  // ✅ ADDED: Provider field
+          orderId: data.orderID,  // ✅ CHANGED: Pass orderId in body, not URL
+          amount: <%= totalAmountDisplay %>
+        })
+      })
+      .then(function(res) {
+        return res.json();
+      })
+      .then(function(captureData) {
+        if (captureData.success) {
+          console.log('🎯 [FRONTEND] PayPal payment captured via Strategy Pattern, redirecting...');
+          // Redirect to success page
+          window.location.href = captureData.redirectUrl;
+        } else {
+          throw new Error(captureData.message || 'Payment capture failed');
+        }
+      });
+    },
+    
+    // Handle errors
+    onError: function(err) {
+      console.error('PayPal error:', err);
+      showError('PayPal payment failed: ' + err.message);
+      resetPayPalButtonState();
+    },
+    
+    // Handle cancellation
+    onCancel: function(data) {
+      showError('PayPal payment was cancelled');
+      resetPayPalButtonState();
+    }
+    
+  }).render('#paypal-button-container');
+  
+  paypalButtonsInitialized = true;
+}
+
+// Function to reset PayPal button state
+function resetPayPalButtonState() {
+  // You might want to show a retry button or reset the UI
+}
+
+// When PayPal method is clicked, initialize the buttons
+paypalMethod.addEventListener('click', () => {
+  paypalMethod.classList.add('active');
+  stripeMethod.classList.remove('active');
+  paypalForm.classList.remove('d-none');
+  stripeForm.classList.add('d-none');
+  
+  // Initialize PayPal buttons with a small delay
+  setTimeout(() => {
+    initializePayPalButtons();
+  }, 100);
+});
     </script>
 </body>
 </html>

@@ -31,16 +31,22 @@ const { isAuthenticated } = require('../middleware/auth');
 
 // Show checkout page
 router.get('/checkout', isAuthenticated, paymentController.showCheckoutPage);
+// Unified payment routes (Strategy Pattern)
+router.post('/process', isAuthenticated, paymentController.processPayment);
+router.post('/create-order', isAuthenticated, paymentController.createOrder);
+router.post('/capture', isAuthenticated, paymentController.capturePayment);
 
-// Process Stripe payment
+// Stripe payment routes
 router.post('/stripe/process-payment-intent', isAuthenticated, paymentController.processStripePayment);
-
-// Confirm 3D Secure payment
 router.post('/stripe/confirm-payment', isAuthenticated, paymentController.confirmPayment);
 
-// Show success page
+// PayPal payment routes (NEW)
+router.post('/paypal/create-order', isAuthenticated, paymentController.createPayPalOrder);
+router.post('/paypal/capture-order/:orderId', isAuthenticated, paymentController.capturePayPalOrder);
+
+// Success and status routes
 router.get('/success', isAuthenticated, paymentController.showSuccessPage);
-// In your paymentRoutes.js
 router.get('/processing', isAuthenticated, paymentController.showProcessingPage);
 router.get('/check-payment-status', isAuthenticated, paymentController.checkPaymentStatus);
+
 module.exports = router;

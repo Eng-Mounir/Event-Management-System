@@ -1,9 +1,28 @@
+// controllers/paymentController.js - WITH FIXED IMPORTS
 const { Op } = require('sequelize');
 const { Event, Registration, User } = require('../models/associations');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const { PaymentFactory } = require('../patterns/paymentStrategies'); // FIXED: patterns not pattern
 
-// Helper function moved to TOP LEVEL - can be called anywhere
-async function handleSuccessfulPayment(paymentIntent, req, res, event, quantity, amount) {
+// PayPal SDK
+const checkoutNodeJssdk = require('@paypal/checkout-server-sdk');
+
+function getPayPalClient() {
+  const clientId = process.env.PAYPAL_CLIENT_ID;
+  const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
+  
+  if (!clientId || !clientSecret) {
+    throw new Error('PayPal credentials not found in environment variables');
+  }
+  
+  console.log('PayPal Client ID starts with:', clientId.substring(0, 10));
+  
+  const environment = new checkoutNodeJssdk.core.SandboxEnvironment(clientId, clientSecret);
+  return new checkoutNodeJssdk.core.PayPalHttpClient(environment);
+}
+
+// Helper function for successful payments
+async function handleSuccessfulPayment(paymentData, req, res, event, quantity, amount, paymentMethod = 'credit_card') {
   try {
     const userId = req.session.user.userId;
     
@@ -29,28 +48,21 @@ async function handleSuccessfulPayment(paymentIntent, req, res, event, quantity,
       userId: userId,
       ticketQuantity: quantity,
       totalAmount: parseFloat(amount),
-      paymentMethod: 'credit_card',
-      paymentId: paymentIntent.id,
+      paymentMethod: paymentMethod,
+      paymentId: paymentMethod === 'credit_card' ? paymentData.id : paymentData.purchase_units[0].payments.captures[0].id,
       status: 'confirmed',
       paymentStatus: 'completed',
       bookingDate: new Date(),
-      paymentDetails: JSON.stringify({
-        paymentIntentId: paymentIntent.id,
-        chargeId: paymentIntent.latest_charge,
-        paymentMethod: paymentIntent.payment_method_types?.[0] || 'card',
-        receiptEmail: paymentIntent.receipt_email,
-        status: paymentIntent.status,
-        amount: paymentIntent.amount,
-        currency: paymentIntent.currency
-      })
+      paymentDetails: JSON.stringify(paymentData)
     });
     
     // Update available seats
     await event.decrement('availableSeats', { by: quantity });
     
-    // ✅ SEND NOTIFICATIONS HERE!
+    // Send notifications
     try {
-      const notificationManager = require('./notificationController').NotificationManager.getInstance();
+      const { NotificationManager } = require('./notificationController');
+      const notificationManager = NotificationManager.getInstance();
       const user = await User.findByPk(userId);
       
       // Send registration confirmation notification
@@ -72,7 +84,7 @@ async function handleSuccessfulPayment(paymentIntent, req, res, event, quantity,
         userEmail: user.email,
         eventTitle: event.title,
         amount: amount,
-        transactionId: paymentIntent.id,
+        transactionId: registration.paymentId,
         registrationId: registration.registrationId
       });
       
@@ -80,7 +92,6 @@ async function handleSuccessfulPayment(paymentIntent, req, res, event, quantity,
       
     } catch (notifError) {
       console.error('❌ Notification error:', notifError);
-      // Don't fail the payment if notification fails
     }
     
     // Return success response
@@ -126,7 +137,8 @@ module.exports = {
         quantity: parseInt(quantity),
         totalAmount,
         user: req.session.user,
-        stripePublicKey: process.env.STRIPE_PUBLIC_KEY
+        stripePublicKey: process.env.STRIPE_PUBLIC_KEY,
+        paypalClientId: process.env.PAYPAL_CLIENT_ID
       });
     } catch (error) {
       console.error('Checkout page error:', error);
@@ -135,7 +147,7 @@ module.exports = {
     }
   },
 
-  // Process Stripe payment
+  // Process Stripe payment (original function - keep for backward compatibility)
   processStripePayment: async (req, res) => {
     try {
       const { eventId, quantity, paymentMethodId, amount, email, name } = req.body;
@@ -180,7 +192,6 @@ module.exports = {
       
       // Handle different Payment Intent statuses
       if (paymentIntent.status === 'requires_action' || paymentIntent.status === 'requires_confirmation') {
-        // 3D Secure authentication required
         res.json({
           success: true,
           requiresAction: true,
@@ -188,11 +199,9 @@ module.exports = {
           message: 'Authentication required'
         });
       } else if (paymentIntent.status === 'succeeded') {
-        // Payment succeeded immediately
         const result = await handleSuccessfulPayment(paymentIntent, req, res, event, quantity, amount);
         res.json(result);
       } else if (paymentIntent.status === 'processing') {
-        // Payment is processing
         res.json({
           success: true,
           requiresAction: false,
@@ -200,7 +209,6 @@ module.exports = {
           redirectUrl: `/payments/processing?payment_intent=${paymentIntent.id}`
         });
       } else {
-        // Handle other statuses
         res.json({
           success: false,
           message: `Unexpected payment status: ${paymentIntent.status}`
@@ -216,6 +224,130 @@ module.exports = {
     }
   },
   
+  // PayPal create order (original function)
+  createPayPalOrder: async (req, res) => {
+    try {
+      const { eventId, quantity, amount } = req.body;
+      console.log('Creating PayPal order for event:', eventId, 'amount:', amount);
+      
+      const event = await Event.findByPk(eventId);
+      
+      if (!event) {
+        return res.status(404).json({ success: false, message: 'Event not found' });
+      }
+      
+      if (event.availableSeats < quantity) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `Only ${event.availableSeats} seats available` 
+        });
+      }
+      
+      // Get PayPal client
+      const client = getPayPalClient();
+      
+      // Create order request
+      const request = new checkoutNodeJssdk.orders.OrdersCreateRequest();
+      request.prefer("return=representation");
+      request.requestBody({
+        intent: 'CAPTURE',
+        purchase_units: [{
+          amount: {
+            currency_code: 'USD',
+            value: amount
+          },
+          description: `Registration for ${event.title}`,
+          custom_id: `event_${eventId}_user_${req.session.user.userId}_quantity_${quantity}`,
+          invoice_id: `EVENT-${eventId}-${Date.now()}`
+        }]
+      });
+      
+      console.log('Sending PayPal order request...');
+      const order = await client.execute(request);
+      console.log('PayPal order created:', order.result.id);
+      
+      res.json({
+        success: true,
+        id: order.result.id,
+        status: order.result.status
+      });
+      
+    } catch (error) {
+      console.error('PayPal create order error:', error.message);
+      console.error('Error stack:', error.stack);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to create PayPal order: ' + error.message
+      });
+    }
+  },
+
+  capturePayPalOrder: async (req, res) => {
+    try {
+      const { orderId } = req.params;
+      console.log('Capturing PayPal order:', orderId);
+      
+      // Get PayPal client
+      const client = getPayPalClient();
+      
+      const request = new checkoutNodeJssdk.orders.OrdersCaptureRequest(orderId);
+      request.prefer("return=representation");
+      
+      console.log('Sending PayPal capture request...');
+      const capture = await client.execute(request);
+      console.log('PayPal capture result:', capture.result.status);
+      
+      if (capture.result.status === 'COMPLETED') {
+        // Extract details from custom_id
+        const customId = capture.result.purchase_units[0].custom_id;
+        console.log('Custom ID from PayPal:', customId);
+        
+        // Parse: event_{eventId}_user_{userId}_quantity_{quantity}
+        const parts = customId.split('_');
+        if (parts.length < 6) {
+          throw new Error('Invalid custom_id format from PayPal');
+        }
+        
+        const eventId = parts[1];
+        const userId = parts[3];
+        const quantity = parts[5];
+        
+        const event = await Event.findByPk(eventId);
+        if (!event) {
+          throw new Error('Event not found');
+        }
+        
+        const amount = capture.result.purchase_units[0].amount.value;
+        
+        // Call your existing handleSuccessfulPayment function
+        const result = await handleSuccessfulPayment(
+          capture.result, 
+          req, 
+          res, 
+          event, 
+          parseInt(quantity), 
+          amount,
+          'paypal'
+        );
+        
+        res.json(result);
+      } else {
+        res.status(400).json({
+          success: false,
+          message: `Payment not completed. Status: ${capture.result.status}`
+        });
+      }
+      
+    } catch (error) {
+      console.error('PayPal capture error:', error.message);
+      console.error('Error stack:', error.stack);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to capture PayPal payment: ' + error.message
+      });
+    }
+  },
+  
   // Show success page
   showSuccessPage: async (req, res) => {
     try {
@@ -225,15 +357,7 @@ module.exports = {
         include: [{
           model: Event,
           as: 'event',
-             attributes: [
-          'title', 
-          'date', 
-          'time', 
-          'venue',  // Venue name
-          'address', // Street address
-          'city',    // City
-          'imageUrl'
-        ]
+          attributes: ['title', 'date', 'time', 'venue', 'address', 'city', 'imageUrl']
         }]
       });
       
@@ -262,7 +386,7 @@ module.exports = {
     }
   },
   
-  // Show processing page (for payments that are still processing)
+  // Show processing page
   showProcessingPage: async (req, res) => {
     try {
       const { payment_intent } = req.query;
@@ -283,107 +407,100 @@ module.exports = {
     }
   },
   
-// Confirm 3D Secure payment
-confirmPayment: async (req, res) => {
-  try {
-    const { paymentIntentId } = req.body;
-    
-    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-    
-    if (paymentIntent.status === 'succeeded') {
-      // Get metadata from payment intent
-      const { eventId, userId, quantity, userEmail, userName } = paymentIntent.metadata;
-      const event = await Event.findByPk(eventId);
-      const amount = (paymentIntent.amount / 100).toFixed(2);
+  // Confirm 3D Secure payment
+  confirmPayment: async (req, res) => {
+    try {
+      const { paymentIntentId } = req.body;
       
-      // Check if registration already exists
-      const existingRegistration = await Registration.findOne({
-        where: {
-          eventId: eventId,
-          userId: userId,
-          status: { [Op.notIn]: ['cancelled', 'refunded'] }
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      
+      if (paymentIntent.status === 'succeeded') {
+        const { eventId, userId, quantity, userEmail, userName } = paymentIntent.metadata;
+        const event = await Event.findByPk(eventId);
+        const amount = (paymentIntent.amount / 100).toFixed(2);
+        
+        const existingRegistration = await Registration.findOne({
+          where: {
+            eventId: eventId,
+            userId: userId,
+            status: { [Op.notIn]: ['cancelled', 'refunded'] }
+          }
+        });
+        
+        if (existingRegistration) {
+          return res.status(400).json({
+            success: false,
+            message: 'You are already registered for this event'
+          });
         }
-      });
-      
-      if (existingRegistration) {
-        return res.status(400).json({
-          success: false,
-          message: 'You are already registered for this event'
-        });
-      }
-      
-      // Create registration
-      const registration = await Registration.create({
-        eventId,
-        userId,
-        ticketQuantity: parseInt(quantity),
-        totalAmount: amount,
-        paymentMethod: 'credit_card',
-        paymentId: paymentIntent.id,
-        status: 'confirmed',
-        paymentStatus: 'completed',
-        bookingDate: new Date()
-      });
-      
-      // Update available seats
-      await event.decrement('availableSeats', { by: parseInt(quantity) });
-      
-      // ✅ SEND NOTIFICATIONS HERE!
-      try {
-        const notificationManager = require('./notificationController').NotificationManager.getInstance();
-        const user = await User.findByPk(userId);
         
-        // Send registration confirmation notification
-        await notificationManager.notify('REGISTRATION_CONFIRMED', {
-          userId: userId,
-          userEmail: userEmail || user.email,
-          eventTitle: event.title,
-          eventDate: event.date.toLocaleDateString(),
-          eventTime: event.time,
-          eventVenue: event.venue,
-          ticketQuantity: quantity,
+        const registration = await Registration.create({
+          eventId,
+          userId,
+          ticketQuantity: parseInt(quantity),
           totalAmount: amount,
-          registrationId: registration.registrationId
+          paymentMethod: 'credit_card',
+          paymentId: paymentIntent.id,
+          status: 'confirmed',
+          paymentStatus: 'completed',
+          bookingDate: new Date()
         });
         
-        // Send payment success notification
-        await notificationManager.notify('PAYMENT_SUCCESS', {
-          userId: userId,
-          userEmail: userEmail || user.email,
-          eventTitle: event.title,
-          amount: amount,
-          transactionId: paymentIntent.id,
-          registrationId: registration.registrationId
+        await event.decrement('availableSeats', { by: parseInt(quantity) });
+        
+        try {
+          const { NotificationManager } = require('./notificationController');
+          const notificationManager = NotificationManager.getInstance();
+          
+          await notificationManager.notify('REGISTRATION_CONFIRMED', {
+            userId: userId,
+            userEmail: userEmail,
+            eventTitle: event.title,
+            eventDate: event.date.toLocaleDateString(),
+            eventTime: event.time,
+            eventVenue: event.venue,
+            ticketQuantity: quantity,
+            totalAmount: amount,
+            registrationId: registration.registrationId
+          });
+          
+          await notificationManager.notify('PAYMENT_SUCCESS', {
+            userId: userId,
+            userEmail: userEmail,
+            eventTitle: event.title,
+            amount: amount,
+            transactionId: paymentIntent.id,
+            registrationId: registration.registrationId
+          });
+          
+          console.log('✅ 3D Secure payment notifications sent');
+          
+        } catch (notifError) {
+          console.error('❌ Notification error:', notifError);
+        }
+        
+        res.json({
+          success: true,
+          registrationId: registration.registrationId,
+          redirectUrl: `/payments/success?registrationId=${registration.registrationId}`
         });
-        
-        console.log('✅ 3D Secure payment notifications sent');
-        
-      } catch (notifError) {
-        console.error('❌ Notification error:', notifError);
+      } else {
+        res.status(400).json({
+          success: false,
+          message: `Payment not completed. Status: ${paymentIntent.status}`
+        });
       }
       
-      res.json({
-        success: true,
-        registrationId: registration.registrationId,
-        redirectUrl: `/payments/success?registrationId=${registration.registrationId}`
-      });
-    } else {
-      res.status(400).json({
+    } catch (error) {
+      console.error('Payment confirmation error:', error);
+      res.status(500).json({
         success: false,
-        message: `Payment not completed. Status: ${paymentIntent.status}`
+        message: 'Payment confirmation failed'
       });
     }
-    
-  } catch (error) {
-    console.error('Payment confirmation error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Payment confirmation failed'
-    });
-  }
-},
+  },
   
-  // Check payment status (for processing payments)
+  // Check payment status
   checkPaymentStatus: async (req, res) => {
     try {
       const { paymentIntentId } = req.query;
@@ -395,10 +512,8 @@ confirmPayment: async (req, res) => {
       const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
       
       if (paymentIntent.status === 'succeeded') {
-        // Get metadata and check if registration exists
         const { eventId, userId, quantity } = paymentIntent.metadata;
         
-        // Look for existing registration
         const registration = await Registration.findOne({
           where: {
             eventId: eventId,
@@ -414,7 +529,6 @@ confirmPayment: async (req, res) => {
             redirectUrl: `/payments/success?registrationId=${registration.registrationId}`
           });
         } else {
-          // Create registration if it doesn't exist
           const event = await Event.findByPk(eventId);
           const amount = (paymentIntent.amount / 100).toFixed(2);
           const newRegistration = await Registration.create({
@@ -449,5 +563,125 @@ confirmPayment: async (req, res) => {
         message: 'Failed to check payment status'
       });
     }
+  },
+  
+  // ============ STRATEGY PATTERN METHODS ============
+  
+  // In paymentController.js - Updated processPayment method
+   processPayment: async (req, res) => {
+  try {
+    const { provider, amount, ...details } = req.body;
+    
+    console.log('🎯 [STRATEGY PATTERN] ===== processPayment called =====');
+    console.log('🎯 [STRATEGY PATTERN] Provider:', provider);
+    console.log('🎯 [STRATEGY PATTERN] Amount:', amount);
+    console.log('🎯 [STRATEGY PATTERN] Details:', details);
+    
+    if (!provider || !amount) {
+      return res.status(400).json({
+        success: false,
+        message: 'Provider and amount are required'
+      });
+    }
+    
+    // Use factory to create strategy
+    console.log('🎯 [STRATEGY PATTERN] Calling PaymentFactory.createStrategy()');
+    const strategy = PaymentFactory.createStrategy(provider);
+    console.log('🎯 [STRATEGY PATTERN] Strategy created:', strategy.constructor.name);
+    
+    // Add user ID to details
+    details.userId = req.session.user.userId;
+    
+    console.log('🎯 [STRATEGY PATTERN] Executing strategy.process()');
+    const startTime = Date.now();
+    const result = await strategy.process(amount, details);
+    const endTime = Date.now();
+    
+    console.log(`🎯 [STRATEGY PATTERN] Strategy execution took: ${endTime - startTime}ms`);
+    console.log('🎯 [STRATEGY PATTERN] Result:', result.success ? 'SUCCESS' : 'FAILED');
+    
+    res.json(result);
+    
+  } catch (error) {
+    console.error('🎯 [STRATEGY PATTERN] Payment processing error:', error.message);
+    res.status(500).json({
+      success: false,
+      message: 'Payment failed: ' + error.message
+    });
   }
-};
+},
+
+// Also update createOrder and capturePayment methods with similar logs
+createOrder: async (req, res) => {
+  try {
+    const { provider, amount, ...details } = req.body;
+    
+    console.log('🎯 [STRATEGY PATTERN] ===== createOrder called =====');
+    console.log('🎯 [STRATEGY PATTERN] Provider:', provider);
+    
+    if (!provider || !amount) {
+      return res.status(400).json({
+        success: false,
+        message: 'Provider and amount are required'
+      });
+    }
+    
+    console.log('🎯 [STRATEGY PATTERN] Calling PaymentFactory.createStrategy()');
+    const strategy = PaymentFactory.createStrategy(provider);
+    console.log('🎯 [STRATEGY PATTERN] Strategy created:', strategy.constructor.name);
+    
+    details.userId = req.session.user.userId;
+    
+    console.log('🎯 [STRATEGY PATTERN] Executing strategy.handleOrderCreation()');
+    const result = await strategy.handleOrderCreation(amount, details);
+    console.log('🎯 [STRATEGY PATTERN] Order created with ID:', result.id);
+    
+    res.json(result);
+    
+  } catch (error) {
+    console.error('🎯 [STRATEGY PATTERN] Order creation error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Order creation failed: ' + error.message
+    });
+  }
+},
+
+capturePayment: async (req, res) => {
+  try {
+    const { provider, amount, orderId } = req.body; // ✅ CHANGED: orderId from body, not params
+    
+    console.log('🎯 [STRATEGY PATTERN] ===== capturePayment called =====');
+    console.log('🎯 [STRATEGY PATTERN] Provider:', provider);
+    console.log('🎯 [STRATEGY PATTERN] Order ID:', orderId);
+    
+    if (!provider || !amount || !orderId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Provider, amount, and orderId are required'
+      });
+    }
+    
+    console.log('🎯 [STRATEGY PATTERN] Calling PaymentFactory.createStrategy()');
+    const strategy = PaymentFactory.createStrategy(provider);
+    console.log('🎯 [STRATEGY PATTERN] Strategy created:', strategy.constructor.name);
+    
+    const details = {
+      orderId: orderId,
+      userId: req.session.user.userId
+    };
+    
+    console.log('🎯 [STRATEGY PATTERN] Executing strategy.handlePaymentCapture()');
+    const result = await strategy.handlePaymentCapture(amount, details);
+    console.log('🎯 [STRATEGY PATTERN] Payment captured successfully');
+    
+    res.json(result);
+    
+  } catch (error) {
+    console.error('🎯 [STRATEGY PATTERN] Payment capture error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Payment capture failed: ' + error.message
+    });
+  }
+}};
